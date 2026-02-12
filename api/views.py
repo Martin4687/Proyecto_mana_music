@@ -395,3 +395,417 @@ class ClasificacionAbcViewSet(viewsets.ModelViewSet):
 
 # Importar models para las anotaciones
 from django.db import models
+
+"""
+Agregar este ViewSet al final de tu archivo api/views.py
+"""
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.db.models import Sum, Count, F, Q
+from django.utils import timezone
+from datetime import timedelta, date
+from decimal import Decimal
+
+
+@api_view(['GET'])
+def dashboard_stats(request):
+    """
+    Endpoint unificado para todas las estadísticas del dashboard
+    GET /api/dashboard/stats/
+    """
+    
+    # ==================== ALERTAS DE STOCK ====================
+    
+    # Productos con stock crítico (stock actual <= stock mínimo)
+    stock_critico = Inventario.objects.filter(
+        stock_actual__lte=F('stock_minimo')
+    ).select_related('id_producto').values(
+        'id_producto__nombre',
+        'stock_actual',
+        'stock_minimo'
+    )[:10]  # Top 10 más críticos
+    
+    # Productos sin movimiento (60 días sin ventas)
+    fecha_limite = timezone.now() - timedelta(days=60)
+    sin_movimiento = Inventario.objects.filter(
+        Q(ultima_venta__lt=fecha_limite) | Q(ultima_venta__isnull=True)
+    ).select_related('id_producto').values(
+        'id_producto__nombre',
+        'ultima_venta',
+        'stock_actual'
+    )[:10]  # Top 10 sin movimiento
+    
+    alertas = {
+        'stock_critico': {
+            'count': Inventario.objects.filter(stock_actual__lte=F('stock_minimo')).count(),
+            'productos': list(stock_critico)
+        },
+        'sin_movimiento': {
+            'count': Inventario.objects.filter(
+                Q(ultima_venta__lt=fecha_limite) | Q(ultima_venta__isnull=True)
+            ).count(),
+            'productos': list(sin_movimiento)
+        }
+    }
+    
+    # ==================== RESUMEN FINANCIERO ====================
+    
+    hoy = timezone.now().date()
+    inicio_mes = date(hoy.year, hoy.month, 1)
+    
+    # Ventas del día
+    ventas_hoy = Venta.objects.filter(
+        fecha_venta=hoy
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+    
+    # Ventas del mes
+    ventas_mes = Venta.objects.filter(
+        fecha_venta__gte=inicio_mes
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+    
+    # Compras del mes
+    compras_mes = Compra.objects.filter(
+        fecha_compra__gte=inicio_mes
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+    
+    # Calcular margen (simplificado: ventas - compras)
+    if ventas_mes > 0:
+        margen = ((ventas_mes - compras_mes) / ventas_mes * 100)
+    else:
+        margen = Decimal('0.00')
+    
+    resumen_financiero = {
+        'ventas_hoy': float(ventas_hoy),
+        'ventas_mes': float(ventas_mes),
+        'compras_mes': float(compras_mes),
+        'margen_porcentaje': float(margen),
+        'ganancia_neta': float(ventas_mes - compras_mes)
+    }
+    
+    # ==================== VENTAS ÚLTIMOS 7 DÍAS ====================
+    
+    ventas_7_dias = []
+    for i in range(6, -1, -1):  # 6, 5, 4, 3, 2, 1, 0
+        fecha = hoy - timedelta(days=i)
+        total_dia = Venta.objects.filter(
+            fecha_venta=fecha
+        ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+        
+        ventas_7_dias.append({
+            'fecha': fecha.strftime('%Y-%m-%d'),
+            'dia': fecha.strftime('%a'),  # Lun, Mar, Mié...
+            'total': float(total_dia)
+        })
+    
+    # ==================== ACTIVIDAD RECIENTE ====================
+    
+    ultimas_ventas = Venta.objects.select_related(
+        'id_producto'
+    ).order_by('-fecha_venta', '-id_venta').values(
+        'id_venta',
+        'id_producto__nombre',
+        'fecha_venta',
+        'total'
+    )[:5]
+    
+    actividad_reciente = []
+    for venta in ultimas_ventas:
+        # Calcular tiempo transcurrido
+        if venta['fecha_venta'] == hoy:
+            tiempo = 'Hoy'
+        elif venta['fecha_venta'] == hoy - timedelta(days=1):
+            tiempo = 'Ayer'
+        else:
+            dias = (hoy - venta['fecha_venta']).days
+            tiempo = f'Hace {dias} días'
+        
+        actividad_reciente.append({
+            'id': venta['id_venta'],
+            'producto': venta['id_producto__nombre'],
+            'fecha': venta['fecha_venta'].strftime('%Y-%m-%d'),
+            'tiempo': tiempo,
+            'total': float(venta['total'])
+        })
+    
+    # ==================== ESTADO DEL INVENTARIO ====================
+    
+    total_productos = Inventario.objects.count()
+    
+    # Contar por estado
+    estado_counts = Inventario.objects.values('estado_inventario').annotate(
+        count=Count('id_inventario')
+    )
+    
+    estado_dict = {item['estado_inventario']: item['count'] for item in estado_counts}
+    
+    # Valor total del inventario
+    valor_total = Inventario.objects.annotate(
+        valor=F('stock_actual') * F('id_producto__precio_unitario')
+    ).aggregate(total=Sum('valor'))['total'] or Decimal('0.00')
+    
+    estado_inventario = {
+        'total_productos': total_productos,
+        'normal': estado_dict.get('NORMAL', 0),
+        'bajo': estado_dict.get('BAJO', 0),
+        'critico': estado_dict.get('CRITICO', 0),
+        'sobrestock': estado_dict.get('SOBRESTOCK', 0),
+        'valor_total': float(valor_total)
+    }
+    
+    # ==================== RESPUESTA COMPLETA ====================
+    
+    return Response({
+        'alertas': alertas,
+        'resumen_financiero': resumen_financiero,
+        'ventas_7_dias': ventas_7_dias,
+        'actividad_reciente': actividad_reciente,
+        'estado_inventario': estado_inventario
+    })
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth.hashers import check_password
+from rest_framework_simplejwt.tokens import RefreshToken
+from api.models import Usuario
+from api.serializers import UsuarioSerializer
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    """
+    Endpoint de login personalizado
+    POST /api/auth/login/
+    
+    Body:
+    {
+        "email": "admin@manamusic.com",
+        "password": "Admin123!"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "message": "Login exitoso",
+        "data": {
+            "access": "token_de_acceso",
+            "refresh": "token_de_refresco",
+            "user": {
+                "id": 1,
+                "email": "admin@manamusic.com",
+                "nombre_completo": "admin admin_ap admin_am",
+                "rol": "Administrador",
+                "rol_id": 1
+            }
+        }
+    }
+    """
+    
+    email = request.data.get('email')
+    password = request.data.get('password')
+    
+    # Validar que se enviaron los datos
+    if not email or not password:
+        return Response({
+            'success': False,
+            'message': 'Email y contraseña son requeridos'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Buscar el usuario por email
+        usuario = Usuario.objects.select_related(
+            'id_persona',
+            'id_persona__id_rol'
+        ).get(email=email)
+        
+        # Verificar si el usuario está activo
+        if not usuario.activo:
+            return Response({
+                'success': False,
+                'message': 'Usuario inactivo. Contacte al administrador.'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Verificar la contraseña
+        if not check_password(password, usuario.password_hash):
+            return Response({
+                'success': False,
+                'message': 'Credenciales incorrectas'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Generar tokens JWT
+        refresh = RefreshToken()
+        refresh['user_id'] = usuario.id_usuario
+        refresh['email'] = usuario.email
+        refresh['rol'] = usuario.id_persona.id_rol.nombre_rol
+        refresh['rol_id'] = usuario.id_persona.id_rol.id_rol
+        
+        # Preparar datos del usuario
+        user_data = {
+            'id': usuario.id_usuario,
+            'email': usuario.email,
+            'nombre_completo': f"{usuario.id_persona.nombres} {usuario.id_persona.apellido_paterno} {usuario.id_persona.apellido_materno}",
+            'nombres': usuario.id_persona.nombres,
+            'apellido_paterno': usuario.id_persona.apellido_paterno,
+            'apellido_materno': usuario.id_persona.apellido_materno,
+            'ci': usuario.id_persona.ci,
+            'telefono': usuario.id_persona.telefono,
+            'rol': usuario.id_persona.id_rol.nombre_rol,
+            'rol_id': usuario.id_persona.id_rol.id_rol,
+            'activo': usuario.activo,
+            'fecha_registro': usuario.fecha_registro
+        }
+        
+        return Response({
+            'success': True,
+            'message': 'Login exitoso',
+            'data': {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': user_data
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Usuario.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Credenciales incorrectas'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+    
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': f'Error en el servidor: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def refresh_token(request):
+    """
+    Refrescar el token de acceso
+    POST /api/auth/refresh/
+    
+    Body:
+    {
+        "refresh": "token_de_refresco"
+    }
+    
+    Response:
+    {
+        "success": true,
+        "access": "nuevo_token_de_acceso"
+    }
+    """
+    from rest_framework_simplejwt.tokens import RefreshToken
+    
+    refresh_token = request.data.get('refresh')
+    
+    if not refresh_token:
+        return Response({
+            'success': False,
+            'message': 'Token de refresco requerido'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        refresh = RefreshToken(refresh_token)
+        return Response({
+            'success': True,
+            'access': str(refresh.access_token)
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': 'Token inválido o expirado'
+        }, status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['POST'])
+def logout(request):
+    """
+    Cerrar sesión (en el frontend simplemente eliminar los tokens)
+    POST /api/auth/logout/
+    
+    Response:
+    {
+        "success": true,
+        "message": "Logout exitoso"
+    }
+    """
+    # En JWT, el logout se maneja principalmente en el frontend
+    # eliminando los tokens del localStorage
+    
+    # Opcionalmente, aquí podrías agregar el token a una blacklist
+    # si implementas esa funcionalidad
+    
+    return Response({
+        'success': True,
+        'message': 'Sesión cerrada exitosamente'
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def verify_token(request):
+    """
+    Verificar si el token es válido y obtener datos del usuario
+    GET /api/auth/verify/
+    
+    Headers:
+    Authorization: Bearer <token>
+    
+    Response:
+    {
+        "success": true,
+        "user": {
+            "id": 1,
+            "email": "admin@manamusic.com",
+            "rol": "Administrador",
+            "rol_id": 1
+        }
+    }
+    """
+    # Si el decorador @api_view con autenticación JWT no falla,
+    # significa que el token es válido
+    
+    try:
+        # El usuario está en request.user si usas autenticación de Django
+        # Pero como usamos nuestro modelo Usuario personalizado,
+        # extraemos los datos del token
+        
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        
+        jwt_auth = JWTAuthentication()
+        validated_token = jwt_auth.get_validated_token(
+            jwt_auth.get_raw_token(
+                jwt_auth.get_header(request)
+            )
+        )
+        
+        user_id = validated_token.get('user_id')
+        
+        usuario = Usuario.objects.select_related(
+            'id_persona',
+            'id_persona__id_rol'
+        ).get(id_usuario=user_id)
+        
+        user_data = {
+            'id': usuario.id_usuario,
+            'email': usuario.email,
+            'nombre_completo': f"{usuario.id_persona.nombres} {usuario.id_persona.apellido_paterno} {usuario.id_persona.apellido_materno}",
+            'rol': usuario.id_persona.id_rol.nombre_rol,
+            'rol_id': usuario.id_persona.id_rol.id_rol,
+        }
+        
+        return Response({
+            'success': True,
+            'user': user_data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': 'Token inválido'
+        }, status=status.HTTP_401_UNAUTHORIZED)

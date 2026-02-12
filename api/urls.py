@@ -5,7 +5,12 @@ from api.views import (
     ProductoViewSet, ProveedorViewSet, ProductoProveedorViewSet,
     InventarioViewSet, VentaViewSet, DetalleVentaViewSet,
     CompraViewSet, DetalleCompraViewSet, OrdenReabastecimientoViewSet,
-    HistorialInventarioViewSet, SegmentoKmeansViewSet, ClasificacionAbcViewSet
+    HistorialInventarioViewSet, SegmentoKmeansViewSet, ClasificacionAbcViewSet,
+    dashboard_stats,
+    login,           
+    logout,          
+    refresh_token,   
+    verify_token,
 )
 
 # Crear el router
@@ -31,6 +36,11 @@ router.register(r'clasificaciones-abc', ClasificacionAbcViewSet, basename='clasi
 # URLs de la app
 urlpatterns = [
     path('', include(router.urls)),
+    path('dashboard/stats/', dashboard_stats, name='dashboard-stats'),
+    path('auth/login/', login, name='login'),
+    path('auth/logout/', logout, name='logout'),
+    path('auth/refresh/', refresh_token, name='refresh-token'),
+    path('auth/verify/', verify_token, name='verify-token'),
 ]
 
 """

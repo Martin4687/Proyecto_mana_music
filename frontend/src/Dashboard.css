@@ -1,0 +1,667 @@
+/* ==================== VARIABLES DE COLOR ==================== */
+:root {
+  /* Paleta Principal - Blanco/Azul Elegante */
+  --color-primary: #1e40af;        /* Azul principal elegante */
+  --color-primary-light: #3b82f6; /* Azul claro */
+  --color-primary-dark: #1e3a8a;  /* Azul oscuro */
+  
+  --color-background: #ffffff;     /* Blanco */
+  --color-background-secondary: #f8fafc; /* Blanco con tinte azul muy suave */
+  --color-surface: #ffffff;        /* Blanco para tarjetas */
+  
+  --color-text-primary: #1e293b;   /* Texto principal */
+  --color-text-secondary: #64748b; /* Texto secundario */
+  --color-border: #e2e8f0;        /* Bordes suaves */
+  
+  /* Colores de Estado (solo para alertas/indicadores) */
+  --color-success: #10b981;       /* Verde */
+  --color-warning: #f59e0b;       /* Amarillo/Naranja */
+  --color-danger: #ef4444;        /* Rojo */
+  --color-info: #3b82f6;          /* Azul info */
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px 0 rgba(30, 64, 175, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(30, 64, 175, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(30, 64, 175, 0.1);
+}
+
+/* ==================== RESET Y BASE ==================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-background-secondary);
+  color: var(--color-text-primary);
+}
+
+/* ==================== DASHBOARD CONTAINER ==================== */
+.dashboard {
+  min-height: 100vh;
+  padding-bottom: 2rem;
+}
+
+/* ==================== HEADER ==================== */
+.dashboard-header {
+  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+  color: white;
+  padding: 1.5rem 2rem;
+  box-shadow: var(--shadow-md);
+}
+
+.header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dashboard-header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-info span {
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+.notification-btn {
+  position: relative;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1.25rem;
+  transition: all 0.2s;
+}
+
+.notification-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--color-danger);
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* ==================== ALERTAS - PRIORIDAD 1 ==================== */
+.alertas-section {
+  max-width: 1400px;
+  margin: -1rem auto 2rem;
+  padding: 0 2rem;
+}
+
+.alertas-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.alerta-card {
+  background: var(--color-surface);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow-lg);
+  border: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+.alerta-card.critico {
+  border-color: var(--color-danger);
+  background: linear-gradient(135deg, #fff 0%, #fee2e2 100%);
+}
+
+.alerta-card.sin-movimiento {
+  border-color: var(--color-warning);
+  background: linear-gradient(135deg, #fff 0%, #fef3c7 100%);
+}
+
+.alerta-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.alerta-icon {
+  font-size: 2rem;
+}
+
+.alerta-content {
+  flex: 1;
+}
+
+.alerta-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.alerta-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+/* ==================== GRID PRINCIPAL ==================== */
+.dashboard-grid {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.dashboard-card {
+  background: var(--color-surface);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  transition: all 0.3s;
+}
+
+.dashboard-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-light);
+}
+
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+/* ==================== RESUMEN FINANCIERO ==================== */
+.financiero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.financiero-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-background-secondary);
+}
+
+.financiero-item.highlight {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  color: white;
+}
+
+.financiero-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.financiero-item.highlight .financiero-label {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.financiero-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.financiero-value.large {
+  font-size: 1.5rem;
+}
+
+.financiero-item.highlight .financiero-value {
+  color: white;
+}
+
+.financiero-value.positive {
+  color: var(--color-success);
+}
+
+.financiero-value.negative {
+  color: var(--color-danger);
+}
+
+.financiero-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.5rem 0;
+}
+
+/* ==================== CLASIFICACIÓN ABC ==================== */
+.abc-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 1rem;
+}
+
+.abc-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.abc-item {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border-left: 4px solid;
+  background: var(--color-background-secondary);
+}
+
+.abc-item.categoria-a {
+  border-left-color: var(--color-success);
+}
+
+.abc-item.categoria-b {
+  border-left-color: var(--color-primary);
+}
+
+.abc-item.categoria-c {
+  border-left-color: var(--color-warning);
+}
+
+.abc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.abc-label {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.abc-badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: rgba(30, 64, 175, 0.1);
+  color: var(--color-primary);
+}
+
+.abc-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.abc-count {
+  color: var(--color-text-secondary);
+}
+
+.abc-percentage {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.abc-link {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.abc-link:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* ==================== GRÁFICO DE VENTAS ==================== */
+.grafico-container {
+  padding: 1rem 0;
+}
+
+.grafico-bars {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  height: 250px;
+  gap: 0.5rem;
+}
+
+.grafico-bar-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 60px;
+}
+
+.grafico-bar {
+  width: 100%;
+  min-height: 20px;
+  background: linear-gradient(180deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+  border-radius: 0.5rem 0.5rem 0 0;
+  position: relative;
+  transition: all 0.3s;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0.5rem;
+}
+
+.grafico-bar:hover {
+  opacity: 0.8;
+  transform: scaleY(1.05);
+}
+
+.grafico-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.grafico-label {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.grafico-dia {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.grafico-fecha {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+/* ==================== ACTIVIDAD RECIENTE ==================== */
+.actividad-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.actividad-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-background-secondary);
+  transition: all 0.2s;
+}
+
+.actividad-item:hover {
+  background: #e0f2fe;
+}
+
+.actividad-icon {
+  font-size: 1.5rem;
+}
+
+.actividad-info {
+  flex: 1;
+}
+
+.actividad-producto {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+}
+
+.actividad-tiempo {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.actividad-monto {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.actividad-empty {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* ==================== INVENTARIO ==================== */
+.inventario-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.inventario-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border-radius: 0.75rem;
+  color: white;
+}
+
+.inventario-total-label {
+  font-size: 0.875rem;
+  opacity: 0.95;
+}
+
+.inventario-total-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.inventario-estados {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inventario-estado {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-background-secondary);
+}
+
+.estado-indicator {
+  font-size: 1.25rem;
+}
+
+.estado-label {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.estado-count {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--color-text-primary);
+}
+
+.inventario-valor {
+  padding: 1rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.inventario-valor-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.inventario-valor-monto {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* ==================== LOADING Y ERROR ==================== */
+.dashboard-loading,
+.dashboard-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 1rem;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.dashboard-error button {
+  padding: 0.75rem 1.5rem;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dashboard-error button:hover {
+  background: var(--color-primary-dark);
+  transform: scale(1.05);
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  
+  .grafico-bars {
+    height: 200px;
+  }
+}
+
+/* Móviles */
+@media (max-width: 768px) {
+  .dashboard-header {
+    padding: 1rem;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  
+  .dashboard-header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .alertas-section,
+  .dashboard-grid {
+    padding: 0 1rem;
+  }
+  
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .alertas-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .grafico-bars {
+    height: 180px;
+  }
+  
+  .grafico-bar-container {
+    min-width: 40px;
+  }
+  
+  .financiero-value.large {
+    font-size: 1.25rem;
+  }
+  
+  .inventario-total-value {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-card {
+    padding: 1rem;
+  }
+  
+  .grafico-value {
+    font-size: 0.65rem;
+  }
+  
+  .actividad-producto {
+    font-size: 0.8rem;
+  }
+  
+  .financiero-value {
+    font-size: 1rem;
+  }
+}
