@@ -74,23 +74,72 @@ class ProductoProveedorSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ProductoSimpleSerializer(serializers.ModelSerializer):
+    """Serializer simple del producto para usar en Inventario"""
+    class Meta:
+        model = Producto
+        fields = [
+            'id_producto',
+            'nombre',
+            'descripcion',
+            'precio_unitario',
+            'categoria',
+            'unidad_medida',
+            'activo'
+        ]
+
+
 class InventarioSerializer(serializers.ModelSerializer):
-    producto_info = ProductoSerializer(source='id_producto', read_only=True)
-    porcentaje_stock = serializers.SerializerMethodField()
-    necesita_reorden = serializers.SerializerMethodField()
+    """Serializer de Inventario con datos del producto incluidos"""
+    
+    # Para lectura: incluir todos los datos del producto
+    producto_info = ProductoSimpleSerializer(source='id_producto', read_only=True)
+    
+    # Para escritura: aceptar solo el ID
+    id_producto = serializers.PrimaryKeyRelatedField(
+        queryset=Producto.objects.all(),
+        write_only=True
+    )
     
     class Meta:
         model = Inventario
-        fields = '__all__'
-    
-    def get_porcentaje_stock(self, obj):
-        if obj.stock_maximo > 0:
-            return round((obj.stock_actual / obj.stock_maximo) * 100, 2)
-        return 0
-    
-    def get_necesita_reorden(self, obj):
-        return obj.stock_actual <= obj.punto_reorden
+        fields = [
+            'id_inventario',
+            'id_producto',      # Para escritura (write_only)
+            'producto_info',    # Para lectura (read_only)
+            'stock_actual',
+            'stock_minimo',
+            'stock_maximo',
+            'punto_reorden',
+            'stock_seguridad',
+            'demanda_promedio_diaria',
+            'tiempo_entrega_dias',
+            'ultima_venta',
+            'ultima_compra',
+            'fecha_actualizacion',
+            'estado_inventario'
+        ]
+        read_only_fields = ['fecha_actualizacion', 'estado_inventario']
 
+    def to_representation(self, instance):
+        """
+        Personalizar la representación para incluir datos del producto
+        """
+        representation = super().to_representation(instance)
+        
+        # Asegurarnos de que producto_info siempre exista
+        if instance.id_producto:
+            representation['producto_info'] = {
+                'id_producto': instance.id_producto.id_producto,
+                'nombre': instance.id_producto.nombre,
+                'descripcion': instance.id_producto.descripcion,
+                'precio_unitario': str(instance.id_producto.precio_unitario),
+                'categoria': instance.id_producto.categoria,
+                'unidad_medida': instance.id_producto.unidad_medida,
+                'activo': instance.id_producto.activo
+            }
+        
+        return representation
 
 class VentaSerializer(serializers.ModelSerializer):
     producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)

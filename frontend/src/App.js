@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import Login from './Login';
+import Sidebar from './Sidebar';
 import Dashboard from './Dashboard';
 import './App.css';
-
+import Productos from './Productos';
+import Inventario from './Inventario';
 const API_URL = 'http://localhost:8000/api';
+
+// Componentes placeholder para cada módulo
+
+const HistorialInventario = () => <div className="page-content"><h1>📋 Historial de Inventario</h1><p>Módulo en construcción...</p></div>;
+const Ventas = () => <div className="page-content"><h1>💰 Ventas</h1><p>Módulo en construcción...</p></div>;
+const Compras = () => <div className="page-content"><h1>🛒 Compras</h1><p>Módulo en construcción...</p></div>;
+const OrdenesReabastecimiento = () => <div className="page-content"><h1>🔄 Órdenes de Reabastecimiento</h1><p>Módulo en construcción...</p></div>;
+const Proveedores = () => <div className="page-content"><h1>🏢 Proveedores</h1><p>Módulo en construcción...</p></div>;
+const Reportes = () => <div className="page-content"><h1>📊 Reportes</h1><p>Módulo en construcción...</p></div>;
+const ClasificacionABC = () => <div className="page-content"><h1>📈 Clasificación ABC</h1><p>Próximamente...</p></div>;
+const Usuarios = () => <div className="page-content"><h1>👥 Usuarios</h1><p>Módulo en construcción...</p></div>;
+const Configuracion = () => <div className="page-content"><h1>⚙️ Configuración</h1><p>Módulo en construcción...</p></div>;
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,7 +27,6 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar si hay un token guardado al cargar la aplicación
     checkAuth();
   }, []);
 
@@ -22,10 +36,7 @@ function App() {
 
     if (token && savedUser) {
       try {
-        // Configurar el header de autorización
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-        // Verificar que el token siga siendo válido
         const response = await axios.get(`${API_URL}/auth/verify/`);
 
         if (response.data.success) {
@@ -50,26 +61,19 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      // Llamar al endpoint de logout (opcional)
       await axios.post(`${API_URL}/auth/logout/`);
     } catch (error) {
       console.error('Error en logout:', error);
     } finally {
-      // Limpiar localStorage
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
-
-      // Limpiar header de autorización
       delete axios.defaults.headers.common['Authorization'];
-
-      // Actualizar estado
       setUser(null);
       setIsAuthenticated(false);
     }
   };
 
-  // Mostrar pantalla de carga mientras se verifica la autenticación
   if (loading) {
     return (
       <div className="app-loading">
@@ -79,33 +83,58 @@ function App() {
     );
   }
 
-  return (
-    <div className="App">
-      {isAuthenticated ? (
-        <div className="app-authenticated">
-          {/* Header con información del usuario */}
-          <header className="app-header">
-            <div className="app-header-content">
-              <div className="user-welcome">
-                <span className="user-greeting">Bienvenido,</span>
-                <span className="user-name">{user?.nombre_completo}</span>
-                <span className="user-role">({user?.rol})</span>
-              </div>
-              <button onClick={handleLogout} className="logout-button">
-                Cerrar Sesión
-              </button>
-            </div>
-          </header>
+  if (!isAuthenticated) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
-          {/* Contenido principal - Dashboard */}
-          <main className="app-main">
-            <Dashboard user={user} />
-          </main>
-        </div>
-      ) : (
-        <Login onLoginSuccess={handleLoginSuccess} />
-      )}
-    </div>
+  return (
+    <Router>
+      <div className="app-layout">
+        <Sidebar user={user} onLogout={handleLogout} />
+        
+        <main className="main-content">
+          <Routes>
+            {/* Ruta por defecto */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            
+            {/* Dashboard */}
+            <Route path="/dashboard" element={<Dashboard user={user} />} />
+            
+            {/* Productos */}
+            <Route path="/productos" element={<Productos />} />
+            
+            {/* Inventario */}
+            <Route path="/inventario" element={<Inventario />} />
+            <Route path="/inventario/historial" element={<HistorialInventario />} />
+            
+            {/* Ventas */}
+            <Route path="/ventas" element={<Ventas />} />
+            
+            {/* Compras */}
+            <Route path="/compras" element={<Compras />} />
+            <Route path="/compras/reabastecimiento" element={<OrdenesReabastecimiento />} />
+            
+            {/* Proveedores */}
+            <Route path="/proveedores" element={<Proveedores />} />
+            
+            {/* Reportes */}
+            <Route path="/reportes" element={<Reportes />} />
+            
+            {/* Clasificación ABC */}
+            <Route path="/clasificacion-abc" element={<ClasificacionABC />} />
+            
+            {/* Usuarios */}
+            <Route path="/usuarios" element={<Usuarios />} />
+            
+            {/* Configuración */}
+            <Route path="/configuracion" element={<Configuracion />} />
+            
+            {/* Ruta 404 */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
 

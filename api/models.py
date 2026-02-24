@@ -21,18 +21,15 @@ class Rol(models.Model):
 class Producto(models.Model):
     """Tabla de productos"""
     CATEGORIAS = [
-        ('MATERIA_PRIMA', 'Materia Prima'),
-        ('PRODUCTO_TERMINADO', 'Producto Terminado'),
-        ('INSUMO', 'Insumo'),
-        ('HERRAMIENTA', 'Herramienta'),
+        ('INSTRUMENTO', 'Instrumento'),
+        ('ACCESORIO', 'Accesorio'),
+        ('REPUESTO', 'Repuesto'),
     ]
     
     UNIDADES_MEDIDA = [
-        ('KG', 'Kilogramo'),
-        ('L', 'Litro'),
         ('UND', 'Unidad'),
-        ('M', 'Metro'),
         ('CAJA', 'Caja'),
+        ('PIEZA', 'Pieza'),
     ]
     
     id_producto = models.AutoField(primary_key=True)

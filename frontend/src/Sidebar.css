@@ -1,0 +1,411 @@
+/* ==================== SIDEBAR CONTAINER ==================== */
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  background: white;
+  border-right: 1px solid #e2e8f0;
+  box-shadow: 2px 0 8px rgba(30, 64, 175, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar.open {
+  width: 280px;
+}
+
+.sidebar.closed {
+  width: 70px;
+}
+
+/* Scrollbar personalizado */
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ==================== TOGGLE BUTTON ==================== */
+.sidebar-toggle {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1001;
+  width: 40px;
+  height: 40px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: none; /* Oculto en desktop */
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-toggle span {
+  width: 20px;
+  height: 2px;
+  background: #1e40af;
+  transition: all 0.3s;
+  border-radius: 2px;
+}
+
+.sidebar-toggle:hover {
+  background: #f8fafc;
+  transform: scale(1.05);
+}
+
+/* Animación del botón cuando está abierto */
+.sidebar-toggle.open span:nth-child(1) {
+  transform: rotate(45deg) translate(6px, 6px);
+}
+
+.sidebar-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.sidebar-toggle.open span:nth-child(3) {
+  transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* ==================== SIDEBAR OVERLAY ==================== */
+.sidebar-overlay {
+  display: none; /* Oculto en desktop */
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* ==================== SIDEBAR HEADER ==================== */
+.sidebar-header {
+  padding: 1.5rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  transition: all 0.3s;
+}
+
+.logo-icon {
+  font-size: 2rem;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.logo-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e40af;
+  white-space: nowrap;
+}
+
+.sidebar.closed .logo-text {
+  display: none;
+}
+
+/* ==================== SIDEBAR USER ==================== */
+.sidebar-user {
+  padding: 1.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+}
+
+.user-avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 0.125rem;
+}
+
+/* ==================== SIDEBAR NAVIGATION ==================== */
+.sidebar-nav {
+  flex: 1;
+  padding: 1rem 0;
+  overflow-y: auto;
+}
+
+.nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  margin: 0.25rem 0;
+}
+
+/* Nav Link */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  color: #64748b;
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+
+.nav-link:hover {
+  background: #f8fafc;
+  color: #1e40af;
+}
+
+.nav-link.active {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #1e40af 0%, #3b82f6 100%);
+  border-radius: 0 4px 4px 0;
+}
+
+.nav-link.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nav-link.disabled:hover {
+  background: transparent;
+  color: #64748b;
+}
+
+.nav-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-text {
+  flex: 1;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.nav-badge {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 1rem;
+  font-weight: 500;
+}
+
+/* Sidebar cerrado - ocultar texto */
+.sidebar.closed .nav-text,
+.sidebar.closed .nav-badge {
+  display: none;
+}
+
+/* ==================== SUBMENU ==================== */
+.nav-link.has-submenu {
+  position: relative;
+}
+
+.submenu-arrow {
+  font-size: 0.6rem;
+  transition: transform 0.2s;
+  color: #94a3b8;
+}
+
+.submenu-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.submenu {
+  list-style: none;
+  padding: 0.5rem 0 0.5rem 0;
+  margin: 0;
+  background: #f8fafc;
+}
+
+.submenu-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem 0.75rem 3.5rem;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.submenu-link:hover {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.submenu-link.active {
+  background: #dbeafe;
+  color: #1e40af;
+  font-weight: 500;
+}
+
+.submenu-icon {
+  font-size: 1rem;
+}
+
+.submenu-text {
+  flex: 1;
+}
+
+/* ==================== SIDEBAR FOOTER ==================== */
+.sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #ef4444;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  background: #ef4444;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.2);
+}
+
+.logout-icon {
+  font-size: 1.25rem;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .sidebar.open {
+    width: 260px;
+  }
+}
+
+/* Móviles */
+@media (max-width: 768px) {
+  .sidebar-toggle {
+    display: flex;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    width: 280px;
+  }
+
+  .sidebar.closed {
+    transform: translateX(-100%);
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  /* Ocultar toggle cuando sidebar está cerrado */
+  .sidebar.closed ~ .sidebar-toggle {
+    left: 1rem;
+  }
+
+  .sidebar.open ~ .sidebar-toggle {
+    left: 295px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar.open {
+    width: 85vw;
+  }
+}
+
+/* ==================== DARK MODE SUPPORT (opcional) ==================== */
+@media (prefers-color-scheme: dark) {
+  /* Agregar estilos de modo oscuro aquí si lo necesitas */
+}

@@ -1,7 +1,8 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Count, Avg, Q
+from django.db.models import Sum, Count, Avg, Q, F
+from decimal import Decimal
 from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
     Inventario, Compra, DetalleCompra, OrdenReabastecimiento,
@@ -123,53 +124,57 @@ class ProductoProveedorViewSet(viewsets.ModelViewSet):
 class InventarioViewSet(viewsets.ModelViewSet):
     queryset = Inventario.objects.select_related('id_producto').all()
     serializer_class = InventarioSerializer
-    
-    @action(detail=False, methods=['get'])
-    def stock_bajo(self, request):
-        """Productos con stock por debajo del mínimo"""
-        inventarios = self.queryset.filter(
-            stock_actual__lte=models.F('stock_minimo')
-        )
-        serializer = self.get_serializer(inventarios, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def stock_critico(self, request):
-        """Productos con stock crítico"""
-        inventarios = self.queryset.filter(estado_inventario='CRITICO')
-        serializer = self.get_serializer(inventarios, many=True)
-        return Response(serializer.data)
-    
-    @action(detail=False, methods=['get'])
-    def necesitan_reorden(self, request):
-        """Productos que necesitan reabastecimiento"""
-        inventarios = self.queryset.filter(
-            stock_actual__lte=models.F('punto_reorden')
-        )
-        serializer = self.get_serializer(inventarios, many=True)
-        return Response(serializer.data)
-    
+
     @action(detail=False, methods=['get'])
     def resumen(self, request):
-        """Resumen del estado del inventario"""
-        total_productos = self.queryset.count()
-        stock_normal = self.queryset.filter(estado_inventario='NORMAL').count()
-        stock_bajo = self.queryset.filter(estado_inventario='BAJO').count()
-        stock_critico = self.queryset.filter(estado_inventario='CRITICO').count()
-        stock_sobre = self.queryset.filter(estado_inventario='SOBRESTOCK').count()
+        """
+        Endpoint para obtener resumen del inventario
+        GET /api/inventarios/resumen/
+        """
+        # Contar por estado
+        estados = Inventario.objects.values('estado_inventario').annotate(
+            count=Count('id_inventario')
+        )
         
-        valor_total = self.queryset.aggregate(
-            valor=Sum(models.F('stock_actual') * models.F('id_producto__precio_unitario'))
-        )['valor'] or 0
+        # Inicializar contadores
+        resumen = {
+            'critico': 0,
+            'bajo': 0,
+            'normal': 0,
+            'sobrestock': 0,
+            'total_productos': 0,
+            'valor_total': 0.0
+        }
         
-        return Response({
-            'total_productos': total_productos,
-            'normal': stock_normal,
-            'bajo': stock_bajo,
-            'critico': stock_critico,
-            'sobrestock': stock_sobre,
-            'valor_total_inventario': float(valor_total)
-        })
+        # Llenar contadores de estados
+        for estado in estados:
+            key = estado['estado_inventario'].lower()
+            if key in resumen:
+                resumen[key] = estado['count']
+        
+        # Total de productos
+        resumen['total_productos'] = Inventario.objects.count()
+        
+        # Calcular valor total del inventario
+        valor_total = Decimal('0.00')
+        
+        for inventario in Inventario.objects.select_related('id_producto').all():
+            try:
+                # Obtener precio del producto
+                precio = inventario.id_producto.precio_unitario or Decimal('0.00')
+                stock = inventario.stock_actual or 0
+                
+                # Calcular valor de este producto
+                valor = Decimal(str(precio)) * Decimal(str(stock))
+                valor_total += valor
+                
+            except Exception as e:
+                print(f"Error calculando valor para {inventario.id_inventario}: {e}")
+                continue
+        
+        resumen['valor_total'] = float(valor_total)
+        
+        return Response(resumen)
 
 
 class VentaViewSet(viewsets.ModelViewSet):

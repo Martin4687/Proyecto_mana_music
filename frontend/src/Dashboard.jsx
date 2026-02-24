@@ -48,24 +48,6 @@ function Dashboard({ user }) {
 
   return (
     <div className="dashboard">
-      {/* Header */}
-      <header className="dashboard-header">
-        <div className="header-content">
-          <h1>🎵 Mana Music</h1>
-          <div className="user-info">
-            <h2>Bienvenido, {user?.nombre_completo}</h2>
-            <button className="notification-btn">
-              🔔
-              {(data.alertas.stock_critico.count + data.alertas.sin_movimiento.count) > 0 && (
-                <span className="notification-badge">
-                  {data.alertas.stock_critico.count + data.alertas.sin_movimiento.count}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Alertas - PRIORIDAD 1 */}
       <section className="dashboard-section alertas-section">
         <div className="alertas-container">

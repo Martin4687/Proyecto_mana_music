@@ -27,120 +27,127 @@
   font-size: 1rem;
 }
 
-/* ==================== APP AUTHENTICATED ==================== */
-.app-authenticated {
+/* ==================== APP LAYOUT (CON SIDEBAR) ==================== */
+.app-layout {
+  display: flex;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ==================== APP HEADER ==================== */
-.app-header {
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.app-header-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 1rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.user-welcome {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.user-greeting {
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-.user-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.user-role {
-  font-size: 0.875rem;
-  color: #1e40af;
-  background: #eff6ff;
-  padding: 0.25rem 0.75rem;
-  border-radius: 1rem;
-  font-weight: 500;
-}
-
-.logout-button {
-  padding: 0.625rem 1.25rem;
-  background: transparent;
-  color: #ef4444;
-  border: 1px solid #ef4444;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.logout-button:hover {
-  background: #ef4444;
-  color: white;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.2);
-}
-
-.logout-button:active {
-  transform: translateY(0);
-}
-
-/* ==================== APP MAIN ==================== */
-.app-main {
-  flex: 1;
   background: #f8fafc;
 }
 
+/* ==================== MAIN CONTENT ==================== */
+.main-content {
+  flex: 1;
+  margin-left: 280px; /* Ancho del sidebar abierto */
+  min-height: 100vh;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Cuando el sidebar está cerrado */
+.sidebar.closed ~ .main-content {
+  margin-left: 70px;
+}
+
+/* ==================== PAGE CONTENT (PLACEHOLDER) ==================== */
+.page-content {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-content h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.page-content p {
+  font-size: 1.125rem;
+  color: #64748b;
+  padding: 2rem;
+  background: white;
+  border-radius: 1rem;
+  border: 2px dashed #e2e8f0;
+  text-align: center;
+}
+
+/* ==================== DASHBOARD CONTAINER ==================== */
+.dashboard {
+  /* El Dashboard ya tiene sus propios estilos */
+  /* Solo ajustamos para que no tenga el header duplicado */
+}
+
+.dashboard .dashboard-header {
+  /* Ocultamos el header del dashboard ya que tenemos el sidebar */
+  display: none;
+}
+
 /* ==================== RESPONSIVE ==================== */
+
+/* Tablets */
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 260px;
+  }
+
+  .sidebar.closed ~ .main-content {
+    margin-left: 70px;
+  }
+}
+
+/* Móviles */
 @media (max-width: 768px) {
-  .app-header-content {
+  .main-content {
+    margin-left: 0;
+  }
+
+  .sidebar.closed ~ .main-content {
+    margin-left: 0;
+  }
+
+  .sidebar.open ~ .main-content {
+    margin-left: 0;
+  }
+
+  .page-content {
     padding: 1rem;
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
   }
 
-  .user-welcome {
-    width: 100%;
-  }
-
-  .logout-button {
-    width: 100%;
-    text-align: center;
+  .page-content h1 {
+    font-size: 1.5rem;
   }
 }
 
 @media (max-width: 480px) {
-  .user-greeting {
-    display: block;
-    width: 100%;
+  .page-content {
+    padding: 1rem 0.75rem;
   }
 
-  .user-name {
-    display: block;
-    width: 100%;
+  .page-content h1 {
+    font-size: 1.25rem;
   }
 
-  .user-role {
-    display: inline-block;
-    margin-top: 0.25rem;
+  .page-content p {
+    padding: 1.5rem;
+    font-size: 1rem;
+  }
+}
+
+/* ==================== UTILIDADES ==================== */
+
+/* Clase para ocultar en móvil */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Clase para ocultar en desktop */
+@media (min-width: 769px) {
+  .hide-desktop {
+    display: none !important;
   }
 }
