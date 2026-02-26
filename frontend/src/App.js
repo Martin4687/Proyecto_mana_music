@@ -7,11 +7,10 @@ import Dashboard from './Dashboard';
 import './App.css';
 import Productos from './Productos';
 import Inventario from './Inventario';
+import HistorialInventario from './HistorialInventario';
 const API_URL = 'http://localhost:8000/api';
 
 // Componentes placeholder para cada módulo
-
-const HistorialInventario = () => <div className="page-content"><h1>📋 Historial de Inventario</h1><p>Módulo en construcción...</p></div>;
 const Ventas = () => <div className="page-content"><h1>💰 Ventas</h1><p>Módulo en construcción...</p></div>;
 const Compras = () => <div className="page-content"><h1>🛒 Compras</h1><p>Módulo en construcción...</p></div>;
 const OrdenesReabastecimiento = () => <div className="page-content"><h1>🔄 Órdenes de Reabastecimiento</h1><p>Módulo en construcción...</p></div>;

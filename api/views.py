@@ -315,7 +315,7 @@ class OrdenReabastecimientoViewSet(viewsets.ModelViewSet):
 
 class HistorialInventarioViewSet(viewsets.ModelViewSet):
     queryset = HistorialInventario.objects.select_related(
-        'id_producto', 'id_usuario'
+        'id_producto', 'id_usuario',
     ).all()
     serializer_class = HistorialInventarioSerializer
     filter_backends = [filters.OrderingFilter]

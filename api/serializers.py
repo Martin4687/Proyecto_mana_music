@@ -88,7 +88,6 @@ class ProductoSimpleSerializer(serializers.ModelSerializer):
             'activo'
         ]
 
-
 class InventarioSerializer(serializers.ModelSerializer):
     """Serializer de Inventario con datos del producto incluidos"""
     
@@ -205,17 +204,60 @@ class OrdenReabastecimientoSerializer(serializers.ModelSerializer):
         return None
 
 
+class UsuarioSimpleSerializer(serializers.ModelSerializer):
+    """
+    Serializer simple del usuario
+    IMPORTANTE: Los campos nombres, apellidos están en Persona, no en Usuario
+    """
+    nombres = serializers.CharField(source='id_persona.nombres', read_only=True)
+    apellido_paterno = serializers.CharField(source='id_persona.apellido_paterno', read_only=True)
+    apellido_materno = serializers.CharField(source='id_persona.apellido_materno', read_only=True)
+    
+    class Meta:
+        model = Usuario
+        fields = [
+            'id_usuario',
+            'email',
+            'nombres',
+            'apellido_paterno',
+            'apellido_materno'
+        ]
+
+
 class HistorialInventarioSerializer(serializers.ModelSerializer):
-    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
-    usuario_email = serializers.EmailField(source='id_usuario.email', read_only=True)
-    diferencia = serializers.SerializerMethodField()
+    """
+    Serializer de Historial con datos anidados del producto y usuario
+    """
+    
+    # Para LECTURA: incluir datos completos del producto y usuario
+    producto_info = ProductoSimpleSerializer(source='id_producto', read_only=True)
+    usuario_info = UsuarioSimpleSerializer(source='id_usuario', read_only=True)
+    
+    # Para ESCRITURA: aceptar solo los IDs
+    id_producto = serializers.PrimaryKeyRelatedField(
+        queryset=Producto.objects.all(),
+        write_only=True
+    )
+    id_usuario = serializers.PrimaryKeyRelatedField(
+        queryset=Usuario.objects.all(),
+        write_only=True
+    )
     
     class Meta:
         model = HistorialInventario
-        fields = '__all__'
-    
-    def get_diferencia(self, obj):
-        return obj.stock_nuevo - obj.stock_anterior
+        fields = [
+            'id_historial',
+            'id_producto',      # Solo para escritura
+            'producto_info',    # Solo para lectura
+            'id_usuario',       # Solo para escritura
+            'usuario_info',     # Solo para lectura
+            'stock_anterior',
+            'stock_nuevo',
+            'tipo_movimiento',
+            'observaciones',
+            'fecha_registro'  # ← Cambia esto si tu campo se llama diferente
+        ]
+        read_only_fields = ['id_historial', 'fecha_registro']
 
 
 class SegmentoKmeansSerializer(serializers.ModelSerializer):
