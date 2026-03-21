@@ -95,16 +95,15 @@ class InventarioSerializer(serializers.ModelSerializer):
     producto_info = ProductoSimpleSerializer(source='id_producto', read_only=True)
     
     # Para escritura: aceptar solo el ID
-    id_producto = serializers.PrimaryKeyRelatedField(
-        queryset=Producto.objects.all(),
-        write_only=True
-    )
+    #id_producto = serializers.PrimaryKeyRelatedField(
+    #    queryset=Producto.objects.all(),
+    #    write_only=True
+    #)
     
     class Meta:
         model = Inventario
         fields = [
-            'id_inventario',
-            'id_producto',      # Para escritura (write_only)
+            'id_inventario',      # Para escritura (write_only)
             'producto_info',    # Para lectura (read_only)
             'stock_actual',
             'stock_minimo',
@@ -118,7 +117,7 @@ class InventarioSerializer(serializers.ModelSerializer):
             'fecha_actualizacion',
             'estado_inventario'
         ]
-        read_only_fields = ['fecha_actualizacion', 'estado_inventario']
+        read_only_fields = ['id_inventario','fecha_actualizacion', 'estado_inventario']
 
     def to_representation(self, instance):
         """
@@ -140,27 +139,6 @@ class InventarioSerializer(serializers.ModelSerializer):
         
         return representation
 
-class VentaSerializer(serializers.ModelSerializer):
-    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
-    detalles = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Venta
-        fields = '__all__'
-    
-    def get_detalles(self, obj):
-        detalles = obj.detalles.all()
-        return DetalleVentaSerializer(detalles, many=True).data
-
-
-class DetalleVentaSerializer(serializers.ModelSerializer):
-    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
-    venta_fecha = serializers.DateField(source='id_venta.fecha_venta', read_only=True)
-    
-    class Meta:
-        model = DetalleVenta
-        fields = '__all__'
-        read_only_fields = ['subtotal']
 
 
 class CompraSerializer(serializers.ModelSerializer):
@@ -285,3 +263,146 @@ class ClasificacionAbcSerializer(serializers.ModelSerializer):
         if total_ventas > 0:
             return round((obj.ventas_acumuladas / total_ventas) * 100, 2)
         return 0
+    
+# ============== SERIALIZERS ANIDADOS ==============
+
+class UsuarioVentaSerializer(serializers.ModelSerializer):
+    """Serializer del usuario para ventas"""
+    nombres = serializers.CharField(source='id_persona.nombres', read_only=True)
+    apellido_paterno = serializers.CharField(source='id_persona.apellido_paterno', read_only=True)
+    apellido_materno = serializers.CharField(source='id_persona.apellido_materno', read_only=True)
+    
+    class Meta:
+        model = Usuario
+        fields = ['id_usuario', 'email', 'nombres', 'apellido_paterno', 'apellido_materno']
+
+
+class ProductoVentaSerializer(serializers.ModelSerializer):
+    """Serializer del producto para detalle de venta"""
+    class Meta:
+        model = Producto
+        fields = ['id_producto', 'nombre', 'precio_unitario', 'categoria', 'unidad_medida']
+
+
+# ============== DETALLE VENTA SERIALIZER ==============
+
+class DetalleVentaSerializer(serializers.ModelSerializer):
+    """Serializer para detalle de venta con información del producto"""
+    
+    # Para lectura: incluir datos del producto
+    producto_info = ProductoVentaSerializer(source='id_producto', read_only=True)
+    
+    # Para escritura: aceptar solo IDs
+    id_venta = serializers.PrimaryKeyRelatedField(
+        queryset=Venta.objects.all(),
+        write_only=True
+    )
+    id_producto = serializers.PrimaryKeyRelatedField(
+        queryset=Producto.objects.all(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = DetalleVenta
+        fields = [
+            'id_detalleventa',
+            'id_venta',
+            'id_producto',
+            'producto_info',
+            'cantidad',
+            'precio_unitario',
+            'subtotal'
+        ]
+    
+    def validate(self, data):
+        """Validar que el subtotal sea correcto"""
+        if 'cantidad' in data and 'precio_unitario' in data:
+            subtotal_calculado = data['cantidad'] * data['precio_unitario']
+            if 'subtotal' in data and abs(float(data['subtotal']) - float(subtotal_calculado)) > 0.01:
+                raise serializers.ValidationError(
+                    "El subtotal no coincide con cantidad × precio_unitario"
+                )
+        return data
+
+
+# ============== VENTA SERIALIZER ==============
+
+class VentaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para venta con información del usuario y detalles
+    """
+    
+    # Para lectura: incluir usuario y detalles
+    usuario_info = UsuarioVentaSerializer(source='id_usuario', read_only=True)
+    detalles = DetalleVentaSerializer(many=True, read_only=True, source='detalleventa_set')
+    
+    # Para escritura: aceptar solo ID de usuario
+    id_usuario = serializers.PrimaryKeyRelatedField(
+        queryset=Usuario.objects.all(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = Venta
+        fields = [
+            'id_venta',
+            'id_usuario',
+            'usuario_info',
+            'fecha_venta',
+            'total',
+            'forma_pago',
+            'observaciones',
+            'detalles'
+        ]
+        read_only_fields = ['id_venta', 'fecha_venta']
+    
+    def validate_total(self, value):
+        """Validar que el total sea positivo"""
+        if value <= 0:
+            raise serializers.ValidationError("El total debe ser mayor a 0")
+        return value
+
+
+# ============== SERIALIZER PARA CREAR VENTA COMPLETA ==============
+
+class VentaCompletaSerializer(serializers.Serializer):
+    """
+    Serializer para crear una venta con sus detalles en una sola operación
+    """
+    id_usuario = serializers.IntegerField()
+    forma_pago = serializers.ChoiceField(choices=['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'QR'])
+    observaciones = serializers.CharField(required=False, allow_blank=True)
+    
+    detalles = serializers.ListField(
+        child=serializers.DictField(),
+        min_length=1
+    )
+    
+    def validate_detalles(self, value):
+        """Validar estructura de detalles"""
+        for detalle in value:
+            if 'id_producto' not in detalle:
+                raise serializers.ValidationError("Cada detalle debe tener id_producto")
+            if 'cantidad' not in detalle:
+                raise serializers.ValidationError("Cada detalle debe tener cantidad")
+            if 'precio_unitario' not in detalle:
+                raise serializers.ValidationError("Cada detalle debe tener precio_unitario")
+            
+            # Validar tipos
+            try:
+                int(detalle['id_producto'])
+                int(detalle['cantidad'])
+                float(detalle['precio_unitario'])
+            except (ValueError, TypeError):
+                raise serializers.ValidationError("Tipos de datos inválidos en detalles")
+        
+        return value
+    
+    def validate(self, data):
+        """Validar que el usuario exista"""
+        try:
+            Usuario.objects.get(id_usuario=data['id_usuario'])
+        except Usuario.DoesNotExist:
+            raise serializers.ValidationError("Usuario no encontrado")
+        
+        return data

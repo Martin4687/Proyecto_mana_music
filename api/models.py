@@ -101,22 +101,68 @@ class Persona(models.Model):
     def __str__(self):
         return f"{self.nombres} {self.apellido_paterno} {self.apellido_materno}"
 
+class Usuario(models.Model):
+    """Tabla de usuarios"""
+    id_usuario = models.AutoField(primary_key=True)
+    id_persona = models.OneToOneField(
+        Persona,
+        on_delete=models.CASCADE,
+        db_column='id_persona',
+        related_name='usuario'
+    )
+    email = models.EmailField(max_length=100, unique=True)
+    password_hash = models.CharField(max_length=255)
+    fecha_registro = models.DateField(auto_now_add=True)
+    activo = models.BooleanField(default=True)
+    
+    class Meta:
+        db_table = 'usuario'
+        verbose_name = 'Usuario'
+        verbose_name_plural = 'Usuarios'
+        ordering = ['email']
+    
+    def __str__(self):
+        return f"{self.email} - {self.id_persona}"
+
 
 class Venta(models.Model):
     """Tabla de ventas"""
+
+    FORMAS_PAGO = [
+        ('EFECTIVO', 'Efectivo'),
+        ('TARJETA', 'Tarjeta'),
+        ('TRANSFERENCIA', 'Transferencia'),
+        ('QR', 'QR'),
+    ]
+
     id_venta = models.AutoField(primary_key=True)
-    id_producto = models.ForeignKey(
-        Producto,
+    
+    # ✅ AGREGAR: Campo de usuario
+    id_usuario = models.ForeignKey(
+        Usuario,
         on_delete=models.PROTECT,
-        db_column='id_producto',
-        related_name='ventas'
+        db_column='id_usuario',
+        related_name='ventas_realizadas'
     )
-    fecha_venta = models.DateField(auto_now_add=True)
+    
+    # ❌ ELIMINAR: Esta línea NO debe estar
+    # id_producto = models.ForeignKey(Producto, ...)
+    
+    fecha_venta = models.DateTimeField(auto_now_add=True)  # ← Cambiar a DateTimeField
+    
     total = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))]
     )
+
+    forma_pago = models.CharField(
+        max_length=20,
+        choices=FORMAS_PAGO,
+        default='EFECTIVO'
+    )
+    
+    observaciones = models.TextField(null=True, blank=True)
     
     class Meta:
         db_table = 'venta'
@@ -261,28 +307,7 @@ class ClasificacionAbc(models.Model):
 
 # ==================== TABLAS DE SEGUNDO NIVEL ====================
 
-class Usuario(models.Model):
-    """Tabla de usuarios"""
-    id_usuario = models.AutoField(primary_key=True)
-    id_persona = models.OneToOneField(
-        Persona,
-        on_delete=models.CASCADE,
-        db_column='id_persona',
-        related_name='usuario'
-    )
-    email = models.EmailField(max_length=100, unique=True)
-    password_hash = models.CharField(max_length=255)
-    fecha_registro = models.DateField(auto_now_add=True)
-    activo = models.BooleanField(default=True)
-    
-    class Meta:
-        db_table = 'usuario'
-        verbose_name = 'Usuario'
-        verbose_name_plural = 'Usuarios'
-        ordering = ['email']
-    
-    def __str__(self):
-        return f"{self.email} - {self.id_persona}"
+
 
 
 class Compra(models.Model):

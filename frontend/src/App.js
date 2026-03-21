@@ -8,10 +8,10 @@ import './App.css';
 import Productos from './Productos';
 import Inventario from './Inventario';
 import HistorialInventario from './HistorialInventario';
+import Ventas from './Ventas';
 const API_URL = 'http://localhost:8000/api';
 
 // Componentes placeholder para cada módulo
-const Ventas = () => <div className="page-content"><h1>💰 Ventas</h1><p>Módulo en construcción...</p></div>;
 const Compras = () => <div className="page-content"><h1>🛒 Compras</h1><p>Módulo en construcción...</p></div>;
 const OrdenesReabastecimiento = () => <div className="page-content"><h1>🔄 Órdenes de Reabastecimiento</h1><p>Módulo en construcción...</p></div>;
 const Proveedores = () => <div className="page-content"><h1>🏢 Proveedores</h1><p>Módulo en construcción...</p></div>;

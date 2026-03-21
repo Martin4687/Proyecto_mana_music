@@ -2,6 +2,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Avg, Q, F
+from datetime import datetime, timedelta
 from decimal import Decimal
 from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
@@ -178,46 +179,146 @@ class InventarioViewSet(viewsets.ModelViewSet):
 
 
 class VentaViewSet(viewsets.ModelViewSet):
-    queryset = Venta.objects.select_related('id_producto').all()
+    """ViewSet para gestión de ventas"""
+    
     serializer_class = VentaSerializer
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ['fecha_venta', 'total']
-    ordering = ['-fecha_venta']
+    
+    def get_queryset(self):
+        """Obtener queryset optimizado"""
+        
+        queryset = Venta.objects.select_related(
+            'id_usuario',
+            'id_usuario__id_persona'
+        )
+        
+        # Filtros
+        fecha_desde = self.request.query_params.get('fecha_desde', None)
+        if fecha_desde:
+            try:
+                fecha = datetime.strptime(fecha_desde, '%Y-%m-%d')
+                queryset = queryset.filter(fecha_venta__gte=fecha)
+            except ValueError:
+                pass
+        
+        fecha_hasta = self.request.query_params.get('fecha_hasta', None)
+        if fecha_hasta:
+            try:
+                fecha = datetime.strptime(fecha_hasta, '%Y-%m-%d')
+                fecha = fecha.replace(hour=23, minute=59, second=59)
+                queryset = queryset.filter(fecha_venta__lte=fecha)
+            except ValueError:
+                pass
+        
+        usuario = self.request.query_params.get('usuario', None)
+        if usuario:
+            queryset = queryset.filter(id_usuario=usuario)
+        
+        forma_pago = self.request.query_params.get('forma_pago', None)
+        if forma_pago:
+            queryset = queryset.filter(forma_pago=forma_pago)
+        
+        return queryset.order_by('-fecha_venta')
     
     @action(detail=False, methods=['get'])
-    def estadisticas(self, request):
-        """Estadísticas de ventas"""
-        total_ventas = self.queryset.aggregate(total=Sum('total'))['total'] or 0
-        promedio_venta = self.queryset.aggregate(promedio=Avg('total'))['promedio'] or 0
-        total_transacciones = self.queryset.count()
+    def resumen(self, request):
+        """Resumen estadístico"""
+        hoy = datetime.now().date()
+        inicio_mes = datetime(hoy.year, hoy.month, 1).date()
+        
+        ventas_hoy = Venta.objects.filter(fecha_venta__date=hoy)
+        total_hoy = ventas_hoy.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+        cantidad_hoy = ventas_hoy.count()
+        promedio_hoy = total_hoy / cantidad_hoy if cantidad_hoy > 0 else Decimal('0.00')
+        
+        ventas_mes = Venta.objects.filter(fecha_venta__date__gte=inicio_mes)
+        total_mes = ventas_mes.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+        cantidad_mes = ventas_mes.count()
+        
+        total_general = Venta.objects.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+        cantidad_general = Venta.objects.count()
         
         return Response({
-            'total_ventas': float(total_ventas),
-            'promedio_venta': float(promedio_venta),
-            'total_transacciones': total_transacciones
+            'total_hoy': float(total_hoy),
+            'cantidad_hoy': cantidad_hoy,
+            'promedio_hoy': float(promedio_hoy),
+            'total_mes': float(total_mes),
+            'cantidad_mes': cantidad_mes,
+            'total_general': float(total_general),
+            'cantidad_general': cantidad_general
         })
     
-    @action(detail=False, methods=['get'])
-    def por_fecha(self, request):
-        """Ventas filtradas por rango de fechas"""
-        fecha_inicio = request.query_params.get('fecha_inicio')
-        fecha_fin = request.query_params.get('fecha_fin')
+    def destroy(self, request, *args, **kwargs):
+        """Eliminar venta (solo mismo día)"""
+        instance = self.get_object()
+        fecha_venta = instance.fecha_venta.date()
+        hoy = datetime.now().date()
         
-        ventas = self.queryset
-        if fecha_inicio:
-            ventas = ventas.filter(fecha_venta__gte=fecha_inicio)
-        if fecha_fin:
-            ventas = ventas.filter(fecha_venta__lte=fecha_fin)
+        if fecha_venta != hoy:
+            return Response(
+                {'error': 'Solo puedes eliminar ventas del mismo día'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
-        serializer = self.get_serializer(ventas, many=True)
-        return Response(serializer.data)
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DetalleVentaViewSet(viewsets.ModelViewSet):
-    queryset = DetalleVenta.objects.select_related(
-        'id_venta', 'id_producto'
-    ).all()
+    """
+    ViewSet para gestión de detalles de venta
+    
+    Endpoints:
+    - GET /api/detalle-venta/ - Listar todos los detalles
+    - POST /api/detalle-venta/ - Crear nuevo detalle
+    - GET /api/detalle-venta/{id}/ - Obtener un detalle específico
+    - PUT /api/detalle-venta/{id}/ - Actualizar un detalle
+    - DELETE /api/detalle-venta/{id}/ - Eliminar un detalle
+    """
+    
     serializer_class = DetalleVentaSerializer
+    
+    def get_queryset(self):
+        """
+        Filtrar detalles por venta o producto con optimización
+        """
+        queryset = DetalleVenta.objects.select_related(
+            'id_venta',
+            'id_producto'
+        )
+        
+        # Filtro por venta
+        venta = self.request.query_params.get('venta', None)
+        if venta:
+            queryset = queryset.filter(id_venta=venta)
+        
+        # Filtro por producto
+        producto = self.request.query_params.get('producto', None)
+        if producto:
+            queryset = queryset.filter(id_producto=producto)
+        
+        return queryset.order_by('-id_detalleventa')
+    
+    @action(detail=False, methods=['delete', 'get'], url_path='por-venta')
+    def eliminar_por_venta(self, request):
+        venta_id = request.query_params.get('venta', None)
+        if not venta_id:
+            return Response(
+                {'error': 'Se requiere el parámetro venta'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if request.method == 'GET':
+            detalles = DetalleVenta.objects.filter(
+                id_venta=venta_id
+            ).select_related('id_producto')
+            serializer = DetalleVentaSerializer(detalles, many=True)
+            return Response(serializer.data)
+        
+        eliminados, _ = DetalleVenta.objects.filter(id_venta=venta_id).delete()
+        return Response(
+            {'eliminados': eliminados},
+            status=status.HTTP_204_NO_CONTENT
+        )
 
 
 class CompraViewSet(viewsets.ModelViewSet):
@@ -505,32 +606,43 @@ def dashboard_stats(request):
     
     # ==================== ACTIVIDAD RECIENTE ====================
     
-    ultimas_ventas = Venta.objects.select_related(
-        'id_producto'
-    ).order_by('-fecha_venta', '-id_venta').values(
-        'id_venta',
-        'id_producto__nombre',
-        'fecha_venta',
-        'total'
-    )[:5]
+    ultimas_ventas = Venta.objects.prefetch_related(
+        'detalles__id_producto'
+    ).order_by('-fecha_venta', '-id_venta')[:5]
+
     
     actividad_reciente = []
     for venta in ultimas_ventas:
+        # Obtener los productos de esta venta desde sus detalles
+        productos = venta.detalles.select_related('id_producto').all()
+        
+        if productos.exists():
+            # Si tiene un solo producto, mostrar su nombre
+            # Si tiene varios, mostrar el primero + cantidad extra
+            nombres = [d.id_producto.nombre for d in productos]
+            if len(nombres) == 1:
+                nombre_producto = nombres[0]
+            else:
+                nombre_producto = f"{nombres[0]} (+{len(nombres)-1} más)"
+        else:
+            nombre_producto = 'Sin detalle'
+
         # Calcular tiempo transcurrido
-        if venta['fecha_venta'] == hoy:
+        fecha = venta.fecha_venta.date() if hasattr(venta.fecha_venta, 'date') else venta.fecha_venta
+        if fecha == hoy:
             tiempo = 'Hoy'
-        elif venta['fecha_venta'] == hoy - timedelta(days=1):
+        elif fecha == hoy - timedelta(days=1):
             tiempo = 'Ayer'
         else:
-            dias = (hoy - venta['fecha_venta']).days
+            dias = (hoy - fecha).days
             tiempo = f'Hace {dias} días'
-        
+
         actividad_reciente.append({
-            'id': venta['id_venta'],
-            'producto': venta['id_producto__nombre'],
-            'fecha': venta['fecha_venta'].strftime('%Y-%m-%d'),
+            'id': venta.id_venta,
+            'producto': nombre_producto,
+            'fecha': fecha.strftime('%Y-%m-%d'),
             'tiempo': tiempo,
-            'total': float(venta['total'])
+            'total': float(venta.total)
         })
     
     # ==================== ESTADO DEL INVENTARIO ====================
@@ -814,3 +926,4 @@ def verify_token(request):
             'success': False,
             'message': 'Token inválido'
         }, status=status.HTTP_401_UNAUTHORIZED)
+    
