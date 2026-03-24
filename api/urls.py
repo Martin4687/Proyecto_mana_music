@@ -6,11 +6,13 @@ from api.views import (
     InventarioViewSet, VentaViewSet, DetalleVentaViewSet,
     CompraViewSet, DetalleCompraViewSet, OrdenReabastecimientoViewSet,
     HistorialInventarioViewSet, SegmentoKmeansViewSet, ClasificacionAbcViewSet,
+    CategoriaViewSet, ConfiguracionTiendaView,
     dashboard_stats,
     login,           
     logout,          
     refresh_token,   
     verify_token,
+    dashboard_compras,
 )
 
 # Crear el router
@@ -27,11 +29,12 @@ router.register(r'inventarios', InventarioViewSet, basename='inventario')
 router.register(r'ventas', VentaViewSet, basename='venta')
 router.register(r'detalle-venta', DetalleVentaViewSet, basename='detalle-venta')
 router.register(r'compras', CompraViewSet, basename='compra')
-router.register(r'detalles-compra', DetalleCompraViewSet, basename='detalle-compra')
+router.register(r'detalle-compra', DetalleCompraViewSet, basename='detallecompra')
 router.register(r'ordenes-reabastecimiento', OrdenReabastecimientoViewSet, basename='orden-reabastecimiento')
 router.register(r'historial-inventario', HistorialInventarioViewSet, basename='historial-inventario')
 router.register(r'segmentos-kmeans', SegmentoKmeansViewSet, basename='segmento-kmeans')
 router.register(r'clasificaciones-abc', ClasificacionAbcViewSet, basename='clasificacion-abc')
+router.register(r'categorias', CategoriaViewSet, basename='categoria')
 
 # URLs de la app
 urlpatterns = [
@@ -41,6 +44,8 @@ urlpatterns = [
     path('auth/logout/', logout, name='logout'),
     path('auth/refresh/', refresh_token, name='refresh-token'),
     path('auth/verify/', verify_token, name='verify-token'),
+    path('dashboard/compras/', dashboard_compras, name='dashboard-compras'),
+    path('configuracion/tienda/', ConfiguracionTiendaView.as_view(), name='config-tienda'),
 ]
 
 """

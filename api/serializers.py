@@ -3,9 +3,8 @@ from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
     Inventario, Compra, DetalleCompra, OrdenReabastecimiento,
     Proveedor, HistorialInventario, ProductoProveedor,
-    SegmentoKmeans, ClasificacionAbc
+    SegmentoKmeans, ClasificacionAbc, ConfiguracionTienda, Categoria, 
 )
-
 
 class RolSerializer(serializers.ModelSerializer):
     class Meta:
@@ -55,14 +54,34 @@ class ProductoSerializer(serializers.ModelSerializer):
 
 
 class ProveedorSerializer(serializers.ModelSerializer):
-    total_productos = serializers.SerializerMethodField()
-    
+    total_compras = serializers.SerializerMethodField()
+    monto_total_compras = serializers.SerializerMethodField()
+ 
     class Meta:
         model = Proveedor
-        fields = '__all__'
-    
-    def get_total_productos(self, obj):
-        return obj.producto_proveedores.count()
+        fields = [
+            'id_proveedor',
+            'nombre',
+            'contacto',
+            'telefono',
+            'email',
+            'direccion',
+            'nit',
+            'tipo',
+            'activo',
+            'fecha_registro',
+            'total_compras',
+            'monto_total_compras',
+        ]
+        read_only_fields = ['id_proveedor', 'fecha_registro']
+ 
+    def get_total_compras(self, obj):
+        return obj.compras.count()
+ 
+    def get_monto_total_compras(self, obj):
+        from django.db.models import Sum
+        result = obj.compras.aggregate(total=Sum('total'))['total']
+        return float(result) if result else 0.0
 
 
 class ProductoProveedorSerializer(serializers.ModelSerializer):
@@ -140,28 +159,55 @@ class InventarioSerializer(serializers.ModelSerializer):
         return representation
 
 
-
-class CompraSerializer(serializers.ModelSerializer):
-    proveedor_nombre = serializers.CharField(source='id_proveedor.nombre', read_only=True)
-    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
-    detalles = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Compra
-        fields = '__all__'
-    
-    def get_detalles(self, obj):
-        detalles = obj.detalles.all()
-        return DetalleCompraSerializer(detalles, many=True).data
-
-
 class DetalleCompraSerializer(serializers.ModelSerializer):
-    producto_nombre = serializers.CharField(source='id_producto.nombre', read_only=True)
-    compra_fecha = serializers.DateField(source='id_compra.fecha_compra', read_only=True)
-    
+    producto_info = ProductoSimpleSerializer(source='id_producto', read_only=True)
+ 
     class Meta:
         model = DetalleCompra
-        fields = '__all__'
+        fields = [
+            'id_detallecompra',
+            'id_compra',
+            'id_producto',
+            'producto_info',
+            'cantidad',
+            'precio_unitario',
+            'subtotal',
+        ]
+        read_only_fields = ['id_detallecompra']
+        extra_kwargs = {
+            'id_producto': {'required': False, 'allow_null': True}  # ✅ permitir null
+        }
+ 
+ 
+class CompraSerializer(serializers.ModelSerializer):
+    detalles = DetalleCompraSerializer(many=True, read_only=True)
+    proveedor_nombre = serializers.CharField(
+        source='id_proveedor.nombre', read_only=True
+    )
+    usuario_nombre = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = Compra
+        fields = [
+            'id_compra',
+            'id_proveedor',
+            'proveedor_nombre',
+            'id_usuario',
+            'usuario_nombre',
+            'fecha_compra',
+            'total',
+            'estado',
+            'forma_pago',
+            'observaciones',
+            'detalles',
+        ]
+        read_only_fields = ['id_compra', 'fecha_compra']
+ 
+    def get_usuario_nombre(self, obj):
+        if obj.id_usuario and obj.id_usuario.id_persona:
+            return obj.id_usuario.id_persona.nombres
+        return ''
+
 
 
 class OrdenReabastecimientoSerializer(serializers.ModelSerializer):
@@ -406,3 +452,39 @@ class VentaCompletaSerializer(serializers.Serializer):
             raise serializers.ValidationError("Usuario no encontrado")
         
         return data
+    
+
+class ConfiguracionTiendaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConfiguracionTienda
+        fields = [
+            'id_config',
+            'nombre_tienda',
+            'direccion',
+            'telefono',
+            'email',
+            'ruc_nit',
+            'moneda',
+            'simbolo_moneda',
+            'fecha_actualizacion',
+        ]
+        read_only_fields = ['id_config', 'fecha_actualizacion']
+ 
+ 
+class CategoriaSerializer(serializers.ModelSerializer):
+    total_productos = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = Categoria
+        fields = [
+            'id_categoria',
+            'nombre',
+            'descripcion',
+            'activo',
+            'fecha_registro',
+            'total_productos',
+        ]
+        read_only_fields = ['id_categoria', 'fecha_registro']
+ 
+    def get_total_productos(self, obj):
+        return obj.productos.filter(activo=True).count()

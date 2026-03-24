@@ -17,15 +17,60 @@ class Rol(models.Model):
     def __str__(self):
         return self.nombre_rol
 
+class ConfiguracionTienda(models.Model):
+    """Configuración general de la tienda — registro único (singleton)"""
+    id_config = models.AutoField(primary_key=True)
+    nombre_tienda = models.CharField(max_length=100, default='Mi Tienda')
+    direccion = models.TextField(blank=True, null=True)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(max_length=100, blank=True, null=True)
+    ruc_nit = models.CharField(max_length=20, blank=True, null=True)
+    moneda = models.CharField(max_length=10, default='BOB')
+    simbolo_moneda = models.CharField(max_length=5, default='Bs.')
+    fecha_actualizacion = models.DateTimeField(auto_now=True)
+ 
+    class Meta:
+        db_table = 'configuracion_tienda'
+        verbose_name = 'Configuración de Tienda'
+ 
+    def __str__(self):
+        return self.nombre_tienda
+ 
+    @classmethod
+    def get_config(cls):
+        """Retorna la configuración, creándola si no existe."""
+        config, _ = cls.objects.get_or_create(id_config=1)
+        return config
+ 
+ 
+class Categoria(models.Model):
+    """Categorías de productos gestionables"""
+    id_categoria = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=50, unique=True)
+    descripcion = models.TextField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    fecha_registro = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        db_table = 'categoria'
+        verbose_name = 'Categoría'
+        verbose_name_plural = 'Categorías'
+        ordering = ['nombre']
+ 
+    def __str__(self):
+        return self.nombre
 
 class Producto(models.Model):
     """Tabla de productos"""
-    CATEGORIAS = [
-        ('INSTRUMENTO', 'Instrumento'),
-        ('ACCESORIO', 'Accesorio'),
-        ('REPUESTO', 'Repuesto'),
-    ]
     
+    categoria = models.ForeignKey(
+        'Categoria',
+        on_delete=models.SET_NULL,
+        db_column='id_categoria',
+        related_name='productos',
+        null=True,
+        blank=True,
+    )
     UNIDADES_MEDIDA = [
         ('UND', 'Unidad'),
         ('CAJA', 'Caja'),
@@ -43,7 +88,6 @@ class Producto(models.Model):
     fecha_registro = models.DateField(auto_now_add=True)
     unidad_medida = models.CharField(max_length=20, choices=UNIDADES_MEDIDA)
     activo = models.BooleanField(default=True)
-    categoria = models.CharField(max_length=20, choices=CATEGORIAS)
     
     class Meta:
         db_table = 'producto'
@@ -57,6 +101,10 @@ class Producto(models.Model):
 
 class Proveedor(models.Model):
     """Tabla de proveedores"""
+    TIPOS = [
+        ('LOCAL', 'Local'),
+        ('IMPORTACION', 'Importación'),
+    ]
     id_proveedor = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=100)
     contacto = models.CharField(max_length=100)
@@ -64,6 +112,10 @@ class Proveedor(models.Model):
     email = models.EmailField(max_length=100)
     direccion = models.TextField(blank=True, null=True)
     fecha_registro = models.DateTimeField(auto_now_add=True)
+
+    nit = models.CharField(max_length=20, blank=True, null=True)        # opcional
+    tipo = models.CharField(max_length=15, choices=TIPOS, default='LOCAL')
+    activo = models.BooleanField(default=True)
     
     class Meta:
         db_table = 'proveedor'
@@ -307,11 +359,19 @@ class ClasificacionAbc(models.Model):
 
 # ==================== TABLAS DE SEGUNDO NIVEL ====================
 
-
-
-
 class Compra(models.Model):
     """Tabla de compras"""
+    ESTADOS = [
+        ('PENDIENTE', 'Pendiente'),
+        ('RECIBIDA', 'Recibida'),
+        ('CANCELADA', 'Cancelada'),
+    ]
+    FORMAS_PAGO = [
+        ('EFECTIVO', 'Efectivo'),
+        ('TARJETA', 'Tarjeta'),
+        ('TRANSFERENCIA', 'Transferencia'),
+        ('CREDITO', 'Crédito'),
+    ]
     id_compra = models.AutoField(primary_key=True)
     id_proveedor = models.ForeignKey(
         Proveedor,
@@ -319,18 +379,30 @@ class Compra(models.Model):
         db_column='id_proveedor',
         related_name='compras'
     )
-    id_producto = models.ForeignKey(
-        Producto,
+    id_usuario = models.ForeignKey(        # ✅ AGREGADO
+        Usuario,
         on_delete=models.PROTECT,
-        db_column='id_producto',
-        related_name='compras'
+        db_column='id_usuario',
+        related_name='compras',
+        null=True, blank=True
     )
-    fecha_compra = models.DateField(auto_now_add=True)
+    fecha_compra = models.DateTimeField(auto_now_add=True)
     total = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.00'))]
     )
+    estado = models.CharField(             # ✅ AGREGADO
+        max_length=20,
+        choices=ESTADOS,
+        default='PENDIENTE'
+    )
+    forma_pago = models.CharField(         # ✅ AGREGADO
+        max_length=20,
+        choices=FORMAS_PAGO,
+        default='EFECTIVO'
+    )
+    observaciones = models.TextField(null=True, blank=True)
     
     class Meta:
         db_table = 'compra'
@@ -396,9 +468,16 @@ class DetalleCompra(models.Model):
         Producto,
         on_delete=models.PROTECT,
         db_column='id_producto',
-        related_name='detalles_compra'
+        related_name='detalles_compra',
+        null=True,  
+        blank=True,
     )
     cantidad = models.IntegerField(validators=[MinValueValidator(1)])
+    precio_unitario = models.DecimalField(  # ✅ AGREGADO
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))]
+    )
     subtotal = models.DecimalField(
         max_digits=10,
         decimal_places=2,

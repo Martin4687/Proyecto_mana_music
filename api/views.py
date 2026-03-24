@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Avg, Q, F
@@ -8,7 +9,7 @@ from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
     Inventario, Compra, DetalleCompra, OrdenReabastecimiento,
     Proveedor, HistorialInventario, ProductoProveedor,
-    SegmentoKmeans, ClasificacionAbc
+    SegmentoKmeans, ClasificacionAbc, ConfiguracionTienda, Categoria
 )
 from .serializers import (
     RolSerializer, PersonaSerializer, UsuarioSerializer,
@@ -16,7 +17,7 @@ from .serializers import (
     InventarioSerializer, CompraSerializer, DetalleCompraSerializer,
     OrdenReabastecimientoSerializer, ProveedorSerializer,
     HistorialInventarioSerializer, ProductoProveedorSerializer,
-    SegmentoKmeansSerializer, ClasificacionAbcSerializer
+    SegmentoKmeansSerializer, ClasificacionAbcSerializer, CategoriaSerializer, ConfiguracionTiendaSerializer
 )
 
 
@@ -90,20 +91,68 @@ class ProductoViewSet(viewsets.ModelViewSet):
 
 
 class ProveedorViewSet(viewsets.ModelViewSet):
-    queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['nombre', 'contacto', 'email', 'telefono']
-    
-    @action(detail=True, methods=['get'])
-    def productos(self, request, pk=None):
-        """Obtener productos de un proveedor"""
+ 
+    def get_queryset(self):
+        queryset = Proveedor.objects.prefetch_related('compras')
+ 
+        tipo = self.request.query_params.get('tipo')
+        activo = self.request.query_params.get('activo')
+        busqueda = self.request.query_params.get('busqueda')
+ 
+        if tipo:
+            queryset = queryset.filter(tipo=tipo)
+        if activo is not None and activo != '':
+            queryset = queryset.filter(activo=activo.lower() == 'true')
+        if busqueda:
+            queryset = queryset.filter(nombre__icontains=busqueda)
+ 
+        return queryset.order_by('nombre')
+ 
+    @action(detail=True, methods=['get'], url_path='historial-compras')
+    def historial_compras(self, request, pk=None):
         proveedor = self.get_object()
-        relaciones = ProductoProveedor.objects.filter(
-            id_proveedor=proveedor, activo=True
-        )
-        serializer = ProductoProveedorSerializer(relaciones, many=True)
-        return Response(serializer.data)
+        compras = Compra.objects.filter(
+            id_proveedor=proveedor
+        ).prefetch_related('detalles__id_producto').order_by('-fecha_compra')
+ 
+        resultado = []
+        for compra in compras:
+            detalles = compra.detalles.select_related('id_producto').all()
+            nombres = [d.id_producto.nombre for d in detalles]
+            if len(nombres) == 0:
+                descripcion = 'Sin detalle'
+            elif len(nombres) == 1:
+                descripcion = nombres[0]
+            else:
+                descripcion = f"{nombres[0]} (+{len(nombres)-1} más)"
+ 
+            resultado.append({
+                'id_compra': compra.id_compra,
+                'fecha': compra.fecha_compra.strftime('%Y-%m-%d') if hasattr(compra.fecha_compra, 'strftime') else str(compra.fecha_compra),
+                'productos': descripcion,
+                'total': float(compra.total),
+                'estado': compra.estado,
+                'forma_pago': compra.forma_pago,
+            })
+ 
+        return Response({
+            'proveedor': proveedor.nombre,
+            'total_compras': len(resultado),
+            'monto_total': sum(c['total'] for c in resultado),
+            'compras': resultado,
+        })
+ 
+    @action(detail=True, methods=['patch'], url_path='toggle-activo')
+    def toggle_activo(self, request, pk=None):
+        proveedor = self.get_object()
+        proveedor.activo = not proveedor.activo
+        proveedor.save()
+        return Response({
+            'id_proveedor': proveedor.id_proveedor,
+            'activo': proveedor.activo,
+            'mensaje': f"Proveedor {'activado' if proveedor.activo else 'desactivado'} correctamente."
+        })
 
 
 class ProductoProveedorViewSet(viewsets.ModelViewSet):
@@ -321,46 +370,7 @@ class DetalleVentaViewSet(viewsets.ModelViewSet):
         )
 
 
-class CompraViewSet(viewsets.ModelViewSet):
-    queryset = Compra.objects.select_related(
-        'id_proveedor', 'id_producto'
-    ).all()
-    serializer_class = CompraSerializer
-    filter_backends = [filters.OrderingFilter]
-    ordering_fields = ['fecha_compra', 'total']
-    ordering = ['-fecha_compra']
-    
-    @action(detail=False, methods=['get'])
-    def estadisticas(self, request):
-        """Estadísticas de compras"""
-        total_compras = self.queryset.aggregate(total=Sum('total'))['total'] or 0
-        promedio_compra = self.queryset.aggregate(promedio=Avg('total'))['promedio'] or 0
-        total_transacciones = self.queryset.count()
-        
-        return Response({
-            'total_compras': float(total_compras),
-            'promedio_compra': float(promedio_compra),
-            'total_transacciones': total_transacciones
-        })
-    
-    @action(detail=False, methods=['get'])
-    def por_proveedor(self, request):
-        """Compras agrupadas por proveedor"""
-        compras_proveedor = self.queryset.values(
-            'id_proveedor', 'id_proveedor__nombre'
-        ).annotate(
-            total_compras=Sum('total'),
-            cantidad_compras=Count('id_compra')
-        ).order_by('-total_compras')
-        
-        return Response(compras_proveedor)
 
-
-class DetalleCompraViewSet(viewsets.ModelViewSet):
-    queryset = DetalleCompra.objects.select_related(
-        'id_compra', 'id_producto'
-    ).all()
-    serializer_class = DetalleCompraSerializer
 
 
 class OrdenReabastecimientoViewSet(viewsets.ModelViewSet):
@@ -619,7 +629,7 @@ def dashboard_stats(request):
         if productos.exists():
             # Si tiene un solo producto, mostrar su nombre
             # Si tiene varios, mostrar el primero + cantidad extra
-            nombres = [d.id_producto.nombre for d in productos]
+            nombres = [d.id_producto.nombre for d in productos if d.id_producto is not None]
             if len(nombres) == 1:
                 nombre_producto = nombres[0]
             else:
@@ -679,6 +689,48 @@ def dashboard_stats(request):
         'actividad_reciente': actividad_reciente,
         'estado_inventario': estado_inventario
     })
+
+
+class CategoriaViewSet(viewsets.ModelViewSet):
+    serializer_class = CategoriaSerializer
+ 
+    def get_queryset(self):
+        queryset = Categoria.objects.all()
+        activo = self.request.query_params.get('activo')
+        if activo is not None and activo != '':
+            queryset = queryset.filter(activo=activo.lower() == 'true')
+        return queryset.order_by('nombre')
+ 
+    @action(detail=True, methods=['patch'], url_path='toggle-activo')
+    def toggle_activo(self, request, pk=None):
+        categoria = self.get_object()
+        categoria.activo = not categoria.activo
+        categoria.save()
+        return Response({
+            'id_categoria': categoria.id_categoria,
+            'activo': categoria.activo,
+            'mensaje': f"Categoría '{ categoria.nombre }' {'activada' if categoria.activo else 'desactivada'}."
+        })
+ 
+ 
+class ConfiguracionTiendaView(APIView):
+    """
+    GET  /api/configuracion/tienda/  → obtener configuración actual
+    PUT  /api/configuracion/tienda/  → actualizar configuración
+    """
+ 
+    def get(self, request):
+        config = ConfiguracionTienda.get_config()
+        serializer = ConfiguracionTiendaSerializer(config)
+        return Response(serializer.data)
+ 
+    def put(self, request):
+        config = ConfiguracionTienda.get_config()
+        serializer = ConfiguracionTiendaSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -927,3 +979,188 @@ def verify_token(request):
             'message': 'Token inválido'
         }, status=status.HTTP_401_UNAUTHORIZED)
     
+
+class CompraViewSet(viewsets.ModelViewSet):
+    serializer_class = CompraSerializer
+ 
+    def get_queryset(self):
+        queryset = Compra.objects.select_related(
+            'id_proveedor', 'id_usuario'
+        ).prefetch_related('detalles__id_producto')
+ 
+        proveedor = self.request.query_params.get('proveedor')
+        estado = self.request.query_params.get('estado')
+        fecha_desde = self.request.query_params.get('fecha_desde')
+        fecha_hasta = self.request.query_params.get('fecha_hasta')
+ 
+        if proveedor:
+            queryset = queryset.filter(id_proveedor=proveedor)
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        if fecha_desde:
+            queryset = queryset.filter(fecha_compra__date__gte=fecha_desde)
+        if fecha_hasta:
+            queryset = queryset.filter(fecha_compra__date__lte=fecha_hasta)
+ 
+        return queryset.order_by('-fecha_compra')
+ 
+ 
+class DetalleCompraViewSet(viewsets.ModelViewSet):
+    serializer_class = DetalleCompraSerializer
+ 
+    def get_queryset(self):
+        queryset = DetalleCompra.objects.select_related('id_compra', 'id_producto')
+ 
+        compra = self.request.query_params.get('compra')
+        if compra:
+            queryset = queryset.filter(id_compra=compra)
+ 
+        return queryset.order_by('-id_detallecompra')
+ 
+    @action(detail=False, methods=['get', 'delete', 'post'], url_path='por-compra')
+    def por_compra(self, request):
+        compra_id = request.query_params.get('compra')
+        if not compra_id:
+            return Response(
+                {'error': 'Se requiere el parámetro compra'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if request.method == 'GET':
+            detalles = DetalleCompra.objects.filter(
+                id_compra=compra_id
+            ).select_related('id_producto')
+            serializer = DetalleCompraSerializer(detalles, many=True)
+            return Response(serializer.data)
+ 
+        if request.method == 'POST':
+            data = request.data if isinstance(request.data, list) else [request.data]
+            serializer = DetalleCompraSerializer(data=data, many=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+        # DELETE
+        eliminados, _ = DetalleCompra.objects.filter(id_compra=compra_id).delete()
+        return Response({'eliminados': eliminados}, status=status.HTTP_204_NO_CONTENT)
+ 
+ 
+# ── Dashboard de compras ──────────────────────────────────────
+@api_view(['GET'])
+def dashboard_compras(request):
+    hoy = timezone.now().date()
+    inicio_mes = date(hoy.year, hoy.month, 1)
+    inicio_anio = date(hoy.year, 1, 1)
+ 
+    # Gasto del mes y del año
+    gasto_mes = Compra.objects.filter(
+        fecha_compra__date__gte=inicio_mes,
+        estado__in=['PENDIENTE', 'RECIBIDA']
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+ 
+    gasto_anio = Compra.objects.filter(
+        fecha_compra__date__gte=inicio_anio,
+        estado__in=['PENDIENTE', 'RECIBIDA']
+    ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+ 
+    # Número de compras del mes
+    num_compras_mes = Compra.objects.filter(
+        fecha_compra__date__gte=inicio_mes
+    ).count()
+ 
+    # Proveedor con más compras del mes
+    top_proveedor = Compra.objects.filter(
+        fecha_compra__date__gte=inicio_mes
+    ).values(
+        'id_proveedor__nombre'
+    ).annotate(
+        total_compras=Count('id_compra'),
+        total_gasto=Sum('total')
+    ).order_by('-total_gasto').first()
+ 
+    # Producto más comprado del mes
+    top_producto = DetalleCompra.objects.filter(
+        id_compra__fecha_compra__date__gte=inicio_mes
+    ).values(
+        'id_producto__nombre'
+    ).annotate(
+        total_cantidad=Sum('cantidad')
+    ).order_by('-total_cantidad').first()
+ 
+    # Compras por estado
+    estados = Compra.objects.values('estado').annotate(
+        count=Count('id_compra')
+    )
+    estados_dict = {e['estado']: e['count'] for e in estados}
+ 
+    # Últimas 7 compras para historial rápido
+    ultimas_compras = Compra.objects.select_related(
+        'id_proveedor'
+    ).prefetch_related('detalles__id_producto').order_by('-fecha_compra')[:7]
+ 
+    historial = []
+    for compra in ultimas_compras:
+        productos = compra.detalles.select_related('id_producto').all()
+        nombres = [d.id_producto.nombre for d in productos if d.id_producto is not None]
+        if len(nombres) == 1:
+            descripcion = nombres[0]
+        elif len(nombres) > 1:
+            descripcion = f"{nombres[0]} (+{len(nombres)-1} más)"
+        else:
+            descripcion = 'Sin detalle'
+ 
+        fecha = compra.fecha_compra.date() if hasattr(compra.fecha_compra, 'date') else compra.fecha_compra
+        if fecha == hoy:
+            tiempo = 'Hoy'
+        elif fecha == hoy - timedelta(days=1):
+            tiempo = 'Ayer'
+        else:
+            dias = (hoy - fecha).days
+            tiempo = f'Hace {dias} días'
+ 
+        historial.append({
+            'id_compra': compra.id_compra,
+            'proveedor': compra.id_proveedor.nombre,
+            'productos': descripcion,
+            'total': float(compra.total),
+            'estado': compra.estado,
+            'fecha': fecha.strftime('%Y-%m-%d'),
+            'tiempo': tiempo,
+        })
+ 
+    # Alertas de reabastecimiento
+    alertas_reabastecimiento = Inventario.objects.filter(
+        stock_actual__lte=F('punto_reorden')
+    ).select_related('id_producto').values(
+        'id_producto__id_producto',
+        'id_producto__nombre',
+        'stock_actual',
+        'punto_reorden',
+        'stock_minimo',
+        'stock_maximo',
+    ).order_by('stock_actual')[:15]
+ 
+    return Response({
+        'metricas': {
+            'gasto_mes': float(gasto_mes),
+            'gasto_anio': float(gasto_anio),
+            'num_compras_mes': num_compras_mes,
+            'top_proveedor': {
+                'nombre': top_proveedor['id_proveedor__nombre'] if top_proveedor else '—',
+                'gasto': float(top_proveedor['total_gasto']) if top_proveedor else 0,
+            },
+            'top_producto': {
+                'nombre': top_producto['id_producto__nombre'] if top_producto else '—',
+                'cantidad': top_producto['total_cantidad'] if top_producto else 0,
+            },
+            'estados': {
+                'pendiente': estados_dict.get('PENDIENTE', 0),
+                'recibida': estados_dict.get('RECIBIDA', 0),
+                'cancelada': estados_dict.get('CANCELADA', 0),
+            }
+        },
+        'alertas_reabastecimiento': list(alertas_reabastecimiento),
+        'historial_reciente': historial,
+    })
+

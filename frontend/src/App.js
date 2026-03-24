@@ -9,16 +9,17 @@ import Productos from './Productos';
 import Inventario from './Inventario';
 import HistorialInventario from './HistorialInventario';
 import Ventas from './Ventas';
+import Compras from './Compras';
+import OrdenesReabastecimiento from './OrdenesReabastecimiento';
+import Proveedores from './Proveedores';
+import Configuracion from './Configuracion';
 const API_URL = 'http://localhost:8000/api';
 
 // Componentes placeholder para cada módulo
-const Compras = () => <div className="page-content"><h1>🛒 Compras</h1><p>Módulo en construcción...</p></div>;
-const OrdenesReabastecimiento = () => <div className="page-content"><h1>🔄 Órdenes de Reabastecimiento</h1><p>Módulo en construcción...</p></div>;
-const Proveedores = () => <div className="page-content"><h1>🏢 Proveedores</h1><p>Módulo en construcción...</p></div>;
 const Reportes = () => <div className="page-content"><h1>📊 Reportes</h1><p>Módulo en construcción...</p></div>;
 const ClasificacionABC = () => <div className="page-content"><h1>📈 Clasificación ABC</h1><p>Próximamente...</p></div>;
 const Usuarios = () => <div className="page-content"><h1>👥 Usuarios</h1><p>Módulo en construcción...</p></div>;
-const Configuracion = () => <div className="page-content"><h1>⚙️ Configuración</h1><p>Módulo en construcción...</p></div>;
+
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
