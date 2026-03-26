@@ -155,6 +155,7 @@ class Persona(models.Model):
 
 class Usuario(models.Model):
     """Tabla de usuarios"""
+    ROLES = [('ADMIN', 'Administrador'), ('VENDEDOR', 'Vendedor')]
     id_usuario = models.AutoField(primary_key=True)
     id_persona = models.OneToOneField(
         Persona,
@@ -166,6 +167,8 @@ class Usuario(models.Model):
     password_hash = models.CharField(max_length=255)
     fecha_registro = models.DateField(auto_now_add=True)
     activo = models.BooleanField(default=True)
+    rol = models.CharField(max_length=20, choices=ROLES, default='VENDEDOR')
+    ultimo_acceso = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         db_table = 'usuario'

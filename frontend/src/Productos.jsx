@@ -299,7 +299,7 @@ function Productos() {
                   <td className="nombre-cell">{producto.nombre}</td>
                   <td className="descripcion-cell">{producto.descripcion || '-'}</td>
                   <td>
-                    <span className={`badge badge-${producto.categoria.toLowerCase()}`}>
+                    <span className={`badge badge-${(producto.categoria || '').toLowerCase()}`}>
                       {CATEGORIAS.find(c => c.value === producto.categoria)?.label}
                     </span>
                   </td>

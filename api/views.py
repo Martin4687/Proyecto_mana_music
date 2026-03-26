@@ -17,7 +17,8 @@ from .serializers import (
     InventarioSerializer, CompraSerializer, DetalleCompraSerializer,
     OrdenReabastecimientoSerializer, ProveedorSerializer,
     HistorialInventarioSerializer, ProductoProveedorSerializer,
-    SegmentoKmeansSerializer, ClasificacionAbcSerializer, CategoriaSerializer, ConfiguracionTiendaSerializer
+    SegmentoKmeansSerializer, ClasificacionAbcSerializer, CategoriaSerializer, ConfiguracionTiendaSerializer,
+    UsuarioListSerializer, UsuarioCreateSerializer, UsuarioUpdateSerializer
 )
 
 
@@ -35,17 +36,69 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
 
 class UsuarioViewSet(viewsets.ModelViewSet):
-    queryset = Usuario.objects.select_related('id_persona', 'id_persona__id_rol').all()
-    serializer_class = UsuarioSerializer
-    filter_backends = [filters.SearchFilter]
-    search_fields = ['email', 'id_persona__nombres', 'id_persona__apellido_paterno']
-    
-    @action(detail=False, methods=['get'])
-    def activos(self, request):
-        """Obtener solo usuarios activos"""
-        usuarios = self.queryset.filter(activo=True)
-        serializer = self.get_serializer(usuarios, many=True)
-        return Response(serializer.data)
+ 
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return UsuarioCreateSerializer
+        if self.action in ['update', 'partial_update']:
+            return UsuarioUpdateSerializer
+        return UsuarioListSerializer
+ 
+    def get_queryset(self):
+        queryset = Usuario.objects.select_related('id_persona').all()
+        rol     = self.request.query_params.get('rol')
+        activo  = self.request.query_params.get('activo')
+        busqueda = self.request.query_params.get('busqueda')
+ 
+        if rol:
+            queryset = queryset.filter(rol=rol)
+        if activo is not None and activo != '':
+            queryset = queryset.filter(activo=activo.lower() == 'true')
+        if busqueda:
+            queryset = queryset.filter(
+                Q(email__icontains=busqueda) |
+                Q(id_persona__nombres__icontains=busqueda) |
+                Q(id_persona__apellido_paterno__icontains=busqueda)
+            )
+        return queryset.order_by('id_persona__apellido_paterno')
+ 
+    @action(detail=True, methods=['patch'], url_path='toggle-activo')
+    def toggle_activo(self, request, pk=None):
+        usuario = self.get_object()
+        usuario.activo = not usuario.activo
+        usuario.save()
+        return Response({
+            'id_usuario': usuario.id_usuario,
+            'activo': usuario.activo,
+            'mensaje': f"Usuario {'activado' if usuario.activo else 'desactivado'} correctamente."
+        })
+ 
+    @action(detail=True, methods=['patch'], url_path='cambiar-password')
+    def cambiar_password(self, request, pk=None):
+        from django.contrib.auth.hashers import make_password
+        usuario = self.get_object()
+        nueva = request.data.get('nueva_password', '')
+        if len(nueva) < 6:
+            return Response(
+                {'error': 'La contraseña debe tener al menos 6 caracteres.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        usuario.password_hash = make_password(nueva)
+        usuario.save()
+        return Response({'mensaje': 'Contraseña actualizada correctamente.'})
+ 
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        total     = Usuario.objects.count()
+        activos   = Usuario.objects.filter(activo=True).count()
+        admins    = Usuario.objects.filter(rol='ADMIN').count()
+        vendedores = Usuario.objects.filter(rol='VENDEDOR').count()
+        return Response({
+            'total': total,
+            'activos': activos,
+            'admins': admins,
+            'vendedores': vendedores,
+        })
 
 
 class ProductoViewSet(viewsets.ModelViewSet):

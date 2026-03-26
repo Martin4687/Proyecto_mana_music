@@ -35,6 +35,136 @@ class UsuarioSerializer(serializers.ModelSerializer):
             'password_hash': {'write_only': True}
         }
 
+class UsuarioListSerializer(serializers.ModelSerializer):
+    """Para listar usuarios con datos de persona incluidos"""
+    nombres        = serializers.CharField(source='id_persona.nombres',           read_only=True)
+    apellido_pat   = serializers.CharField(source='id_persona.apellido_paterno',  read_only=True)
+    apellido_mat   = serializers.CharField(source='id_persona.apellido_materno',  read_only=True)
+    ci             = serializers.CharField(source='id_persona.ci',                read_only=True)
+    telefono       = serializers.CharField(source='id_persona.telefono',          read_only=True)
+    nombre_completo = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = Usuario
+        fields = [
+            'id_usuario',
+            'email',
+            'rol',
+            'activo',
+            'fecha_registro',
+            'ultimo_acceso',
+            'nombres',
+            'apellido_pat',
+            'apellido_mat',
+            'ci',
+            'telefono',
+            'nombre_completo',
+        ]
+        read_only_fields = ['id_usuario', 'fecha_registro', 'ultimo_acceso']
+ 
+    def get_nombre_completo(self, obj):
+        p = obj.id_persona
+        return f"{p.nombres} {p.apellido_paterno} {p.apellido_materno}"
+ 
+ 
+class UsuarioCreateSerializer(serializers.ModelSerializer):
+    """Para crear un usuario junto con sus datos de persona"""
+    # Campos de Persona
+    nombres           = serializers.CharField(write_only=True)
+    apellido_paterno  = serializers.CharField(write_only=True)
+    apellido_materno  = serializers.CharField(write_only=True)
+    ci                = serializers.CharField(write_only=True)
+    telefono          = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    password          = serializers.CharField(write_only=True, min_length=6)
+ 
+    class Meta:
+        model = Usuario
+        fields = [
+            'email', 'rol', 'activo',
+            'nombres', 'apellido_paterno', 'apellido_materno', 'ci', 'telefono',
+            'password',
+        ]
+ 
+    def validate_email(self, value):
+        if Usuario.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Ya existe un usuario con este email.")
+        return value
+ 
+    def validate_ci(self, value):
+        if Persona.objects.filter(ci=value).exists():
+            raise serializers.ValidationError("Ya existe una persona con este CI.")
+        return value
+ 
+    def create(self, validated_data):
+        from django.contrib.auth.hashers import make_password
+        from .models import Rol
+ 
+        # Separar campos de Persona
+        nombres          = validated_data.pop('nombres')
+        apellido_paterno = validated_data.pop('apellido_paterno')
+        apellido_materno = validated_data.pop('apellido_materno')
+        ci               = validated_data.pop('ci')
+        telefono         = validated_data.pop('telefono', '')
+        password         = validated_data.pop('password')
+ 
+        # Obtener rol según el rol del usuario (ADMIN → id_rol=1, VENDEDOR → id_rol=2)
+        # Ajusta los IDs según los que tengas en tu tabla Rol
+        rol_nombre = validated_data.get('rol', 'VENDEDOR')
+        rol_map = {'ADMIN': 'Administrador', 'VENDEDOR': 'Vendedor'}
+        rol_obj = Rol.objects.filter(nombre_rol=rol_map.get(rol_nombre, 'Vendedor')).first()
+        if not rol_obj:
+            rol_obj = Rol.objects.first()
+ 
+        # Crear Persona
+        persona = Persona.objects.create(
+            id_rol=rol_obj,
+            nombres=nombres,
+            apellido_paterno=apellido_paterno,
+            apellido_materno=apellido_materno,
+            ci=ci,
+            telefono=telefono,
+        )
+ 
+        # Crear Usuario
+        usuario = Usuario.objects.create(
+            id_persona=persona,
+            password_hash=make_password(password),
+            **validated_data,
+        )
+        return usuario
+ 
+ 
+class UsuarioUpdateSerializer(serializers.ModelSerializer):
+    """Para editar datos básicos y de persona"""
+    nombres          = serializers.CharField()
+    apellido_paterno = serializers.CharField()
+    apellido_materno = serializers.CharField()
+    ci               = serializers.CharField()
+    telefono         = serializers.CharField(required=False, allow_blank=True)
+ 
+    class Meta:
+        model = Usuario
+        fields = ['email', 'rol', 'activo', 'nombres', 'apellido_paterno', 'apellido_materno', 'ci', 'telefono']
+ 
+    def validate_email(self, value):
+        if Usuario.objects.filter(email=value).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError("Ya existe un usuario con este email.")
+        return value
+ 
+    def update(self, instance, validated_data):
+        # Actualizar Persona
+        persona = instance.id_persona
+        persona.nombres          = validated_data.pop('nombres', persona.nombres)
+        persona.apellido_paterno = validated_data.pop('apellido_paterno', persona.apellido_paterno)
+        persona.apellido_materno = validated_data.pop('apellido_materno', persona.apellido_materno)
+        persona.ci               = validated_data.pop('ci', persona.ci)
+        persona.telefono         = validated_data.pop('telefono', persona.telefono)
+        persona.save()
+        # Actualizar Usuario
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 class ProductoSerializer(serializers.ModelSerializer):
     tiene_inventario = serializers.SerializerMethodField()
