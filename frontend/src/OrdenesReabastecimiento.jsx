@@ -444,7 +444,20 @@ function ModalFormulario({ orden, proveedores, productos, onClose, onGuardar }) 
     setError('');
     setGuardando(true);
 
-    const filasValidas = getFilasValidas();
+    const filasValidas = getFilasValidas().map(f => {
+        if (f.id_producto) return f;
+        const match = productos.find(
+            p => p.nombre.toLowerCase() === f.nombre_producto.trim().toLowerCase()
+        );
+        return { ...f, id_producto: match?.id_producto || null };
+    });
+
+    const sinId = filasValidas.find(f => !f.id_producto);
+    if (sinId) {
+        setError(`"${sinId.nombre_producto}" no existe en el sistema. Selecciónalo desde la lista de sugerencias.`);
+        setGuardando(false);
+        return;
+    }
 
     try {
       const usuario = JSON.parse(localStorage.getItem('user'));
@@ -737,32 +750,26 @@ export default function OrdenesReabastecimiento() {
       await axios.patch(`${API_URL}/compras/${orden.id_compra}/`, { estado: 'RECIBIDA' });
 
       // 2. Por cada detalle, aumentar stock y registrar historial
-      const usuario = JSON.parse(localStorage.getItem('user'));
+      const todosInvRes = await axios.get(`${API_URL}/inventarios/`);
+      const todosInv = todosInvRes.data;
+      //const usuario = JSON.parse(localStorage.getItem('user'));
       for (const detalle of orden.detalles || []) {
-        if (!detalle.id_producto) continue;
-        try {
-          const invRes = await axios.get(`${API_URL}/inventarios/?producto=${detalle.id_producto}`);
-          if (invRes.data.length === 0) continue;
-          const inv = invRes.data[0];
-          const nuevoStock = inv.stock_actual + detalle.cantidad;
+            const productoId = detalle.id_producto;
+            if (!productoId) continue;
 
-          await axios.patch(`${API_URL}/inventarios/${inv.id_inventario}/`, {
-            stock_actual: nuevoStock,
-            ultima_compra: new Date().toISOString(),
-          });
+            // Buscar inventario del producto client-side
+            const inv = todosInv.find(i =>
+                (i.producto_info?.id_producto || i.id_producto) === productoId
+            );
+            if (!inv) continue;
 
-          await axios.post(`${API_URL}/historial-inventario/`, {
-            id_producto: detalle.id_producto,
-            id_usuario: usuario?.id,
-            stock_anterior: inv.stock_actual,
-            stock_nuevo: nuevoStock,
-            tipo_movimiento: 'ENTRADA_COMPRA',
-            observaciones: `Compra #${orden.id_compra}`,
-          });
-        } catch (e) {
-          console.error(`Error actualizando stock del producto ${detalle.id_producto}:`, e);
+            const nuevoStock = inv.stock_actual + detalle.cantidad;
+
+            await axios.patch(`${API_URL}/inventarios/${inv.id_inventario}/`, {
+                stock_actual: nuevoStock,
+                ultima_compra: new Date().toISOString().split('T')[0],
+            });
         }
-      }
       await cargarDatos();
       alert(`✅ Orden #${orden.id_compra} marcada como recibida. Stock actualizado.`);
     } catch (e) {

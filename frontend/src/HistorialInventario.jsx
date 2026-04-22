@@ -6,14 +6,18 @@ const API_URL = 'http://localhost:8000/api';
 
 // Configuración de tipos de movimiento
 const TIPOS_MOVIMIENTO = {
-  'COMPRA': { label: 'Compra', icon: '🟢', color: 'success', tipo: 'entrada' },
-  'VENTA': { label: 'Venta', icon: '🔴', color: 'danger', tipo: 'salida' },
-  'AJUSTE_POSITIVO': { label: 'Ajuste +', icon: '⚙️', color: 'info', tipo: 'entrada' },
-  'AJUSTE_NEGATIVO': { label: 'Ajuste -', icon: '⚙️', color: 'warning', tipo: 'salida' },
-  'DEVOLUCION_CLIENTE': { label: 'Dev. Cliente', icon: '🔄', color: 'success', tipo: 'entrada' },
-  'DEVOLUCION_PROVEEDOR': { label: 'Dev. Proveedor', icon: '🔄', color: 'danger', tipo: 'salida' },
-  'MERMA': { label: 'Merma', icon: '⚠️', color: 'danger', tipo: 'salida' },
-  'INVENTARIO_FISICO': { label: 'Inv. Físico', icon: '📦', color: 'info', tipo: 'ajuste' }
+  // Valores nuevos (desde signals.py)
+  'ENTRADA_COMPRA':      { label: 'Compra',        icon: '🟢', color: 'success', tipo: 'entrada' },
+  'SALIDA_VENTA':        { label: 'Venta',          icon: '🔴', color: 'danger',  tipo: 'salida'  },
+  'AJUSTE_POSITIVO':     { label: 'Ajuste +',       icon: '⚙️', color: 'info',    tipo: 'entrada' },
+  'AJUSTE_NEGATIVO':     { label: 'Ajuste -',       icon: '⚙️', color: 'warning', tipo: 'salida'  },
+  // Valores legacy (por si hay registros anteriores)
+  'COMPRA':              { label: 'Compra',         icon: '🟢', color: 'success', tipo: 'entrada' },
+  'VENTA':               { label: 'Venta',          icon: '🔴', color: 'danger',  tipo: 'salida'  },
+  'DEVOLUCION_CLIENTE':  { label: 'Dev. Cliente',   icon: '🔄', color: 'success', tipo: 'entrada' },
+  'DEVOLUCION_PROVEEDOR':{ label: 'Dev. Proveedor', icon: '🔄', color: 'danger',  tipo: 'salida'  },
+  'MERMA':               { label: 'Merma',          icon: '⚠️', color: 'danger',  tipo: 'salida'  },
+  'INVENTARIO_FISICO':   { label: 'Inv. Físico',    icon: '📦', color: 'info',    tipo: 'ajuste'  },
 };
 
 function HistorialInventario() {
@@ -207,7 +211,7 @@ function HistorialInventario() {
   const getNombreUsuario = (movimiento) => {
     const usuario = movimiento.usuario_info;
     if (!usuario) return 'Sistema';
-    return `${usuario.nombres} ${usuario.apellido_paterno}`.trim();
+    return `${usuario.nombres || ''} ${usuario.apellido_paterno || ''}`.trim() || 'Sistema';
   };
 
   const formatearFecha = (fecha) => {

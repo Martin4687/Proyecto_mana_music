@@ -424,7 +424,7 @@ class DetalleVenta(models.Model):
         Venta,
         on_delete=models.CASCADE,
         db_column='id_venta',
-        related_name='detalles'
+        related_name='detalleventa_set'
     )
     id_producto = models.ForeignKey(
         Producto,
@@ -581,7 +581,9 @@ class HistorialInventario(models.Model):
     )
     id_usuario = models.ForeignKey(
         Usuario,
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         db_column='id_usuario',
         related_name='historial_inventario'
     )

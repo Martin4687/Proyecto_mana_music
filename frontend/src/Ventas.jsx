@@ -68,6 +68,9 @@ function Ventas() {
       ]);
       
       setVentas(ventasRes.data);
+      console.log('Primera venta:', JSON.stringify(ventasRes.data[0], null, 2));
+      console.log('Primer detalle:', JSON.stringify(ventasRes.data[0]?.detalles?.[0], null, 2));
+        
       setProductos(productosRes.data.filter(p => p.activo));
       setUsuarios(usuariosRes.data);
       setError('');
@@ -141,7 +144,8 @@ function Ventas() {
       resultado = resultado.filter(venta => {
         if (!venta.detalles || !Array.isArray(venta.detalles)) return false;
         return venta.detalles.some(detalle => {
-          const productoId = detalle.producto_info?.id_producto || detalle.id_producto;
+          const productoId = detalle.producto_id 
+                ?? detalle.producto_info?.id_producto;
           return productoId === parseInt(filtroProducto);
         });
       });
@@ -208,18 +212,21 @@ function Ventas() {
   // VALIDAR STOCK
   const validarStockDisponible = async () => {
     try {
+      const inventariosRes = await axios.get(`${API_URL}/inventarios/`);
+      const todosInventarios = inventariosRes.data;
+      
       for (const item of carrito) {
-        const inventarioRes = await axios.get(`${API_URL}/inventarios/?producto=${item.producto.id_producto}`);
+        const inv = todosInventarios.find(i =>
+                (i.producto_info?.id_producto || i.id_producto) === item.producto.id_producto
+            );
         
-        if (inventarioRes.data.length === 0) {
-          alert(`No hay inventario para ${item.producto.nombre}`);
-          return false;
+        if (!inv) {
+                alert(`No hay inventario registrado para ${item.producto.nombre}`);
+                return false;
         }
-
-        const inventario = inventarioRes.data[0];
         
         // En modo edición, sumar el stock de la venta original
-        let stockDisponible = inventario.stock_actual;
+        let stockDisponible = inv.stock_actual;
         if (modoEdicion && ventaActual) {
           const detalleOriginal = ventaActual.detalles?.find(
             d => (d.producto_info?.id_producto || d.id_producto) === item.producto.id_producto
@@ -245,136 +252,62 @@ function Ventas() {
   // CREAR/EDITAR VENTA
   const handleGuardarVenta = async () => {
     if (carrito.length === 0) {
-      alert('Agrega al menos un producto');
-      return;
+        alert('Agrega al menos un producto');
+        return;
     }
 
     const stockValido = await validarStockDisponible();
     if (!stockValido) return;
 
     try {
-      const usuario = JSON.parse(localStorage.getItem('user'));
-      const total = calcularTotal();
+        const usuario = JSON.parse(localStorage.getItem('user'));
+        const total = calcularTotal();
 
-      const ventaData = {
-        id_usuario: usuario.id,
-        total: total.toFixed(2),
-        forma_pago: formaPago,
-        observaciones: observaciones
-      };
-
-      let ventaResponse;
-      
-      if (modoEdicion) {
-        // EDITAR VENTA EXISTENTE
-        ventaResponse = await axios.put(
-          `${API_URL}/ventas/${ventaActual.id_venta}/`,
-          ventaData
-        );
-
-        // Revertir stock de la venta original
-        for (const detalle of ventaActual.detalles) {
-          const productoId = detalle.producto_info?.id_producto || detalle.id_producto;
-          await revertirStock(productoId, detalle.cantidad);
-        }
-
-        // Eliminar detalles antiguos
-        await axios.delete(`${API_URL}/detalle-venta/por-venta/?venta=${ventaActual.id_venta}`);
-      } else {
-        // CREAR NUEVA VENTA
-        ventaResponse = await axios.post(`${API_URL}/ventas/`, ventaData);
-      }
-
-      const idVenta = ventaResponse.data.id_venta;
-
-      // Crear detalles
-      for (const item of carrito) {
-        const detalleData = {
-          id_venta: idVenta,
-          id_producto: item.producto.id_producto,
-          cantidad: item.cantidad,
-          precio_unitario: item.precio_unitario.toFixed(2),
-          subtotal: item.subtotal.toFixed(2)
+        const ventaData = {
+            id_usuario: usuario.id,
+            total: total.toFixed(2),
+            forma_pago: formaPago,
+            observaciones: observaciones
         };
 
-        await axios.post(`${API_URL}/detalle-venta/`, detalleData);
+        let ventaResponse;
 
-        // Descontar stock
-        await descontarStock(item.producto.id_producto, item.cantidad, idVenta);
-      }
+        if (modoEdicion) {
+            ventaResponse = await axios.put(
+                `${API_URL}/ventas/${ventaActual.id_venta}/`,
+                ventaData
+            );
+            // Eliminar detalles antiguos — la señal restaura el stock automáticamente
+            await axios.delete(
+                `${API_URL}/detalle-venta/por-venta/?venta=${ventaActual.id_venta}`
+            );
+        } else {
+            ventaResponse = await axios.post(`${API_URL}/ventas/`, ventaData);
+        }
 
-      await cargarDatos();
-      cerrarModales();
-      alert(modoEdicion ? 'Venta actualizada correctamente' : 'Venta registrada correctamente');
+        const idVenta = ventaResponse.data.id_venta;
+
+        // Crear detalles — la señal descuenta el stock automáticamente
+        for (const item of carrito) {
+            await axios.post(`${API_URL}/detalle-venta/`, {
+                id_venta: idVenta,
+                id_producto: item.producto.id_producto,
+                cantidad: item.cantidad,
+                precio_unitario: item.precio_unitario.toFixed(2),
+                subtotal: item.subtotal.toFixed(2)
+            });
+        }
+
+        await cargarDatos();
+        cerrarModales();
+        alert(modoEdicion ? 'Venta actualizada correctamente' : 'Venta registrada correctamente');
     } catch (error) {
-      console.error('Error al guardar venta:', error);
-      alert('Error al guardar la venta');
+        console.error('Error al guardar venta:', error);
+        alert('Error al guardar la venta');
     }
   };
 
-  const descontarStock = async (productoId, cantidad, idVenta) => {
-    try {
-      const inventarioRes = await axios.get(`${API_URL}/inventarios/?producto=${productoId}`);
-      if (inventarioRes.data.length === 0) return;
-
-      const inventario = inventarioRes.data[0];
-      const nuevoStock = inventario.stock_actual - cantidad;
-
-      await axios.patch(`${API_URL}/inventarios/${inventario.id_inventario}/`, {
-        id_producto: productoId,
-        stock_actual: nuevoStock,
-        stock_minimo: inventario.stock_minimo,
-        stock_maximo: inventario.stock_maximo,
-        punto_reorden: inventario.punto_reorden,
-        stock_seguridad: inventario.stock_seguridad,
-        demanda_promedio_diaria: inventario.demanda_promedio_diaria,
-        tiempo_entrega_dias: inventario.tiempo_entrega_dias
-      });
-
-      // Registrar en historial
-      const usuario = JSON.parse(localStorage.getItem('user'));
-      const historialData = {
-        id_producto: productoId,
-        id_usuario: usuario.id,
-        stock_anterior: inventario.stock_actual,
-        stock_nuevo: nuevoStock,
-        tipo_movimiento: 'SALIDA_VENTA',
-        observaciones: `Venta #${idVenta}`
-      };
-      console.log('Enviando historial:', historialData);
-      try {
-        await axios.post(`${API_URL}/historial-inventario/`, historialData);
-      } catch (historialError) {
-        console.error('Error historial - response data:', historialError.response?.data);
-        // ✅ Esto mostrará exactamente qué campo está fallando
-      }
-    } catch (error) {
-      console.error('Error al descontar stock:', error);
-    }
-  };
-
-  const revertirStock = async (productoId, cantidad) => {
-    try {
-      const inventarioRes = await axios.get(`${API_URL}/inventarios/?producto=${productoId}`);
-      if (inventarioRes.data.length === 0) return;
-
-      const inventario = inventarioRes.data[0];
-      const nuevoStock = inventario.stock_actual + cantidad;
-
-      await axios.patch(`${API_URL}/inventarios/${inventario.id_inventario}/`, {
-        id_producto: productoId,
-        stock_actual: nuevoStock,
-        stock_minimo: inventario.stock_minimo,
-        stock_maximo: inventario.stock_maximo,
-        punto_reorden: inventario.punto_reorden,
-        stock_seguridad: inventario.stock_seguridad,
-        demanda_promedio_diaria: inventario.demanda_promedio_diaria,
-        tiempo_entrega_dias: inventario.tiempo_entrega_dias
-      });
-    } catch (error) {
-      console.error('Error al revertir stock:', error);
-    }
-  };
+  
 
   // MODALES
   const abrirModalNueva = () => {
@@ -448,57 +381,21 @@ function Ventas() {
 
   const handleCancelarVenta = async () => {
     try {
-      // Obtener detalles
-      const detallesRes = await axios.get(`${API_URL}/detalle-venta/por-venta/?venta=${ventaActual.id_venta}`);
+        // Eliminar detalles — la señal restaura el stock y registra
+        // el historial automáticamente por cada detalle eliminado
+        await axios.delete(
+            `${API_URL}/detalle-venta/por-venta/?venta=${ventaActual.id_venta}`
+        );
 
-      // Devolver stock
-      const usuario = JSON.parse(localStorage.getItem('user'));
-      
-      for (const detalle of detallesRes.data) {
-        const productoId = detalle.producto_info?.id_producto || detalle.id_producto;
-        
-        // Obtener inventario
-        const inventarioRes = await axios.get(`${API_URL}/inventarios/?producto=${productoId}`);
-        if (inventarioRes.data.length === 0) continue;
+        // Eliminar la venta
+        await axios.delete(`${API_URL}/ventas/${ventaActual.id_venta}/`);
 
-        const inventario = inventarioRes.data[0];
-        const nuevoStock = inventario.stock_actual + detalle.cantidad;
-
-        // Actualizar inventario
-        await axios.put(`${API_URL}/inventarios/${inventario.id_inventario}/`, {
-          id_producto: productoId,
-          stock_actual: nuevoStock,
-          stock_minimo: inventario.stock_minimo,
-          stock_maximo: inventario.stock_maximo,
-          punto_reorden: inventario.punto_reorden,
-          stock_seguridad: inventario.stock_seguridad,
-          demanda_promedio_diaria: inventario.demanda_promedio_diaria,
-          tiempo_entrega_dias: inventario.tiempo_entrega_dias
-        });
-
-        // Registrar en historial
-        await axios.post(`${API_URL}/historial-inventario/`, {
-          id_producto: productoId,
-          id_usuario: usuario.id,
-          stock_anterior: inventario.stock_actual,
-          stock_nuevo: nuevoStock,
-          tipo_movimiento: 'DEVOLUCION_CLIENTE',
-          observaciones: `Cancelación de Venta #${ventaActual.id_venta}`
-        });
-      }
-
-      // Eliminar detalles
-      await axios.delete(`${API_URL}/detalle-venta/por-venta/?venta=${ventaActual.id_venta}`);
-
-      // Eliminar venta
-      await axios.delete(`${API_URL}/ventas/${ventaActual.id_venta}/`);
-
-      await cargarDatos();
-      cerrarModales();
-      alert('Venta cancelada correctamente');
+        await cargarDatos();
+        cerrarModales();
+        alert('Venta cancelada correctamente');
     } catch (error) {
-      console.error('Error al cancelar venta:', error);
-      alert('Error al cancelar la venta');
+        console.error('Error al cancelar venta:', error.response?.data);
+        alert('Error al cancelar la venta');
     }
   };
 

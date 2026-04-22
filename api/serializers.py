@@ -3,7 +3,7 @@ from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
     Inventario, Compra, DetalleCompra, OrdenReabastecimiento,
     Proveedor, HistorialInventario, ProductoProveedor,
-    SegmentoKmeans, ClasificacionAbc, ConfiguracionTienda, Categoria, 
+    SegmentoKmeans, ClasificacionAbc, Categoria, 
 )
 
 class RolSerializer(serializers.ModelSerializer):
@@ -168,11 +168,29 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
 
 class ProductoSerializer(serializers.ModelSerializer):
     tiene_inventario = serializers.SerializerMethodField()
-    stock_actual = serializers.SerializerMethodField()
+    categoria_nombre = serializers.CharField(
+        source='categoria.nombre', read_only=True
+    )
     
     class Meta:
         model = Producto
-        fields = '__all__'
+        fields = [
+            'id_producto',
+            'nombre',
+            'descripcion',
+            'precio_unitario',
+            'fecha_registro',
+            'unidad_medida',
+            'activo',
+            'categoria',       # FK — para escritura (recibe el ID)
+            'categoria_nombre', # para lectura (devuelve el nombre)
+            'tiene_inventario',
+        ]
+        read_only_fields = ['id_producto', 'fecha_registro']
+        extra_kwargs = {
+            'categoria': {'required': False, 'allow_null': True}
+        }
+
     
     def get_tiene_inventario(self, obj):
         return hasattr(obj, 'inventario')
@@ -281,10 +299,11 @@ class InventarioSerializer(serializers.ModelSerializer):
                 'nombre': instance.id_producto.nombre,
                 'descripcion': instance.id_producto.descripcion,
                 'precio_unitario': str(instance.id_producto.precio_unitario),
-                'categoria': instance.id_producto.categoria,
+                'categoria_id': instance.id_producto.categoria_id,          # ✅ solo el ID
+                'categoria_nombre': instance.id_producto.categoria.nombre if instance.id_producto.categoria else None,  # ✅ nombre legible
                 'unidad_medida': instance.id_producto.unidad_medida,
                 'activo': instance.id_producto.activo
-            }
+        }
         
         return representation
 
@@ -467,7 +486,8 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
     
     # Para lectura: incluir datos del producto
     producto_info = ProductoVentaSerializer(source='id_producto', read_only=True)
-    
+    producto_id = serializers.IntegerField(source='id_producto_id', read_only=True)
+
     # Para escritura: aceptar solo IDs
     id_venta = serializers.PrimaryKeyRelatedField(
         queryset=Venta.objects.all(),
@@ -484,6 +504,7 @@ class DetalleVentaSerializer(serializers.ModelSerializer):
             'id_detalleventa',
             'id_venta',
             'id_producto',
+            'producto_id', 
             'producto_info',
             'cantidad',
             'precio_unitario',
@@ -583,23 +604,6 @@ class VentaCompletaSerializer(serializers.Serializer):
         
         return data
     
-
-class ConfiguracionTiendaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ConfiguracionTienda
-        fields = [
-            'id_config',
-            'nombre_tienda',
-            'direccion',
-            'telefono',
-            'email',
-            'ruc_nit',
-            'moneda',
-            'simbolo_moneda',
-            'fecha_actualizacion',
-        ]
-        read_only_fields = ['id_config', 'fecha_actualizacion']
- 
  
 class CategoriaSerializer(serializers.ModelSerializer):
     total_productos = serializers.SerializerMethodField()

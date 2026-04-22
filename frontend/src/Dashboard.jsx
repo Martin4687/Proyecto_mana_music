@@ -78,25 +78,25 @@ function Dashboard({ user }) {
           <div className="financiero-content">
             <div className="financiero-item">
               <span className="financiero-label">Ventas Hoy</span>
-              <span className="financiero-value">${data.resumen_financiero.ventas_hoy.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
+              <span className="financiero-value">Bs. {data.resumen_financiero.ventas_hoy.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
             </div>
             
             <div className="financiero-item highlight">
               <span className="financiero-label">Ventas del Mes</span>
-              <span className="financiero-value large">${data.resumen_financiero.ventas_mes.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
+              <span className="financiero-value large">Bs. {data.resumen_financiero.ventas_mes.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
             </div>
             
             <div className="financiero-item">
               <span className="financiero-label">Compras del Mes</span>
-              <span className="financiero-value">${data.resumen_financiero.compras_mes.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
+              <span className="financiero-value">Bs. {data.resumen_financiero.compras_mes.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
             </div>
             
             <div className="financiero-divider"></div>
             
             <div className="financiero-item">
               <span className="financiero-label">Ganancia Neta</span>
-              <span className={`financiero-value ${data.resumen_financiero.ganancia_neta >= 0 ? 'positive' : 'negative'}`}>
-                ${data.resumen_financiero.ganancia_neta.toLocaleString('es-BO', {minimumFractionDigits: 2})}
+              <span className={`financiero-value Bs. {data.resumen_financiero.ganancia_neta >= 0 ? 'positive' : 'negative'}`}>
+                Bs. {data.resumen_financiero.ganancia_neta.toLocaleString('es-BO', {minimumFractionDigits: 2})}
               </span>
             </div>
             
@@ -158,16 +158,16 @@ function Dashboard({ user }) {
             <div className="grafico-bars">
               {data.ventas_7_dias.map((dia, index) => {
                 const maxVenta = Math.max(...data.ventas_7_dias.map(d => d.total));
-                const altura = maxVenta > 0 ? (dia.total / maxVenta) * 100 : 0;
+                const altura = maxVenta > 0 ? Math.max((dia.total / maxVenta) * 100, dia.total > 0 ? 2 : 0) : 0;
                 
                 return (
                   <div key={index} className="grafico-bar-container">
                     <div 
                       className="grafico-bar" 
                       style={{height: `${altura}%`}}
-                      title={`$${dia.total.toLocaleString('es-BO')}`}
+                      title={`Bs. {dia.total.toLocaleString('es-BO')}`}
                     >
-                      <span className="grafico-value">${dia.total.toLocaleString('es-BO', {maximumFractionDigits: 0})}</span>
+                      <span className="grafico-value">Bs. {dia.total.toLocaleString('es-BO', {maximumFractionDigits: 0})}</span>
                     </div>
                     <div className="grafico-label">
                       <div className="grafico-dia">{dia.dia}</div>
@@ -192,7 +192,7 @@ function Dashboard({ user }) {
                     <div className="actividad-producto">{venta.producto}</div>
                     <div className="actividad-tiempo">{venta.tiempo}</div>
                   </div>
-                  <div className="actividad-monto">${venta.total.toLocaleString('es-BO', {minimumFractionDigits: 2})}</div>
+                  <div className="actividad-monto">Bs. {venta.total.toLocaleString('es-BO', {minimumFractionDigits: 2})}</div>
                 </div>
               ))
             ) : (
@@ -240,7 +240,7 @@ function Dashboard({ user }) {
             
             <div className="inventario-valor">
               <span className="inventario-valor-label">Valor Total del Inventario</span>
-              <span className="inventario-valor-monto">${data.estado_inventario.valor_total.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
+              <span className="inventario-valor-monto">Bs. {data.estado_inventario.valor_total.toLocaleString('es-BO', {minimumFractionDigits: 2})}</span>
             </div>
           </div>
         </section>

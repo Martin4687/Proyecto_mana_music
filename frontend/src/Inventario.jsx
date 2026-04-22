@@ -14,7 +14,8 @@ function Inventario() {
   const [inventarios, setInventarios] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+  const [categorias, setCategorias] = useState([]);
+
   // Filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
@@ -48,13 +49,15 @@ function Inventario() {
   const cargarDatos = async () => {
     try {
       setLoading(true);
-      const [inventariosRes, estadisticasRes] = await Promise.all([
+      const [inventariosRes, estadisticasRes, categoriasRes] = await Promise.all([
         axios.get(`${API_URL}/inventarios/`),
-        axios.get(`${API_URL}/inventarios/resumen/`)
+        axios.get(`${API_URL}/inventarios/resumen/`),
+        axios.get(`${API_URL}/categorias/?activo=true`)
       ]);
       
       setInventarios(inventariosRes.data);
       setEstadisticas(estadisticasRes.data);
+      setCategorias(categoriasRes.data);
       setError('');
     } catch (error) {
       console.error('Error al cargar inventario:', error);
@@ -72,7 +75,8 @@ function Inventario() {
     
     const matchSearch = nombreProducto.toLowerCase().includes(searchTerm.toLowerCase());
     const matchEstado = !filtroEstado || inv.estado_inventario === filtroEstado;
-    const matchCategoria = !filtroCategoria || producto?.categoria === filtroCategoria;
+    const matchCategoria = !filtroCategoria || 
+        String(producto?.categoria_id) === filtroCategoria;
     
     return matchSearch && matchEstado && matchCategoria;
   });
@@ -386,9 +390,11 @@ const handleAjustarStock = async (e) => {
           className="filtro-select"
         >
           <option value="">Todas las categorías</option>
-          <option value="INSTRUMENTO">Instrumento</option>
-          <option value="ACCESORIO">Accesorio</option>
-          <option value="REPUESTO">Repuesto</option>
+          {categorias.map(cat => (
+            <option key={cat.id_categoria} value={String(cat.id_categoria)}>
+                {cat.nombre}
+            </option>
+          ))}
         </select>
       </div>
 

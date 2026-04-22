@@ -2,14 +2,15 @@ from rest_framework import viewsets, filters, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Sum, Count, Avg, Q, F
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from django.db.models import Sum, Count, Avg, Q, F, ProtectedError
 from datetime import datetime, timedelta
 from decimal import Decimal
 from .models import (
     Rol, Persona, Usuario, Producto, Venta, DetalleVenta,
     Inventario, Compra, DetalleCompra, OrdenReabastecimiento,
     Proveedor, HistorialInventario, ProductoProveedor,
-    SegmentoKmeans, ClasificacionAbc, ConfiguracionTienda, Categoria
+    SegmentoKmeans, ClasificacionAbc, Categoria
 )
 from .serializers import (
     RolSerializer, PersonaSerializer, UsuarioSerializer,
@@ -17,7 +18,7 @@ from .serializers import (
     InventarioSerializer, CompraSerializer, DetalleCompraSerializer,
     OrdenReabastecimientoSerializer, ProveedorSerializer,
     HistorialInventarioSerializer, ProductoProveedorSerializer,
-    SegmentoKmeansSerializer, ClasificacionAbcSerializer, CategoriaSerializer, ConfiguracionTiendaSerializer,
+    SegmentoKmeansSerializer, ClasificacionAbcSerializer, CategoriaSerializer,
     UsuarioListSerializer, UsuarioCreateSerializer, UsuarioUpdateSerializer
 )
 
@@ -100,13 +101,23 @@ class UsuarioViewSet(viewsets.ModelViewSet):
             'vendedores': vendedores,
         })
 
-
 class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'descripcion', 'categoria']
     ordering_fields = ['nombre', 'precio_unitario', 'fecha_registro']
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ProtectedError:
+            return Response(
+                {'error': 'No se puede eliminar este producto porque tiene ventas o compras asociadas.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=False, methods=['get'])
     def activos(self, request):
@@ -291,6 +302,8 @@ class VentaViewSet(viewsets.ModelViewSet):
         queryset = Venta.objects.select_related(
             'id_usuario',
             'id_usuario__id_persona'
+        ).prefetch_related(
+        'detalleventa_set__id_producto'
         )
         
         # Filtros
@@ -421,9 +434,19 @@ class DetalleVentaViewSet(viewsets.ModelViewSet):
             {'eliminados': eliminados},
             status=status.HTTP_204_NO_CONTENT
         )
-
-
-
+    def perform_create(self, serializer):
+        producto = serializer.validated_data.get('id_producto')
+        cantidad = serializer.validated_data.get('cantidad')
+        try:
+            inventario = Inventario.objects.get(id_producto=producto)
+            if inventario.stock_actual < cantidad:
+                raise DRFValidationError(
+                    {'cantidad': f'Stock insuficiente para {producto.nombre}. '
+                                 f'Disponible: {inventario.stock_actual}'}
+                )
+        except Inventario.DoesNotExist:
+            pass
+        serializer.save()
 
 
 class OrdenReabastecimientoViewSet(viewsets.ModelViewSet):
@@ -625,17 +648,17 @@ def dashboard_stats(request):
     
     # Ventas del día
     ventas_hoy = Venta.objects.filter(
-        fecha_venta=hoy
+        fecha_venta__date=hoy
     ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
     
     # Ventas del mes
     ventas_mes = Venta.objects.filter(
-        fecha_venta__gte=inicio_mes
+        fecha_venta__date__gte=inicio_mes
     ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
     
     # Compras del mes
     compras_mes = Compra.objects.filter(
-        fecha_compra__gte=inicio_mes
+        fecha_compra__date__gte=inicio_mes
     ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
     
     # Calcular margen (simplificado: ventas - compras)
@@ -658,7 +681,7 @@ def dashboard_stats(request):
     for i in range(6, -1, -1):  # 6, 5, 4, 3, 2, 1, 0
         fecha = hoy - timedelta(days=i)
         total_dia = Venta.objects.filter(
-            fecha_venta=fecha
+            fecha_venta__date=fecha
         ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
         
         ventas_7_dias.append({
@@ -669,28 +692,30 @@ def dashboard_stats(request):
     
     # ==================== ACTIVIDAD RECIENTE ====================
     
-    ultimas_ventas = Venta.objects.prefetch_related(
-        'detalles__id_producto'
-    ).order_by('-fecha_venta', '-id_venta')[:5]
+    ultimas_ventas = Venta.objects.select_related(
+        'id_usuario', 'id_usuario__id_persona'
+    ).order_by('-fecha_venta')[:10]
 
-    
     actividad_reciente = []
     for venta in ultimas_ventas:
-        # Obtener los productos de esta venta desde sus detalles
-        productos = venta.detalles.select_related('id_producto').all()
-        
-        if productos.exists():
-            # Si tiene un solo producto, mostrar su nombre
-            # Si tiene varios, mostrar el primero + cantidad extra
-            nombres = [d.id_producto.nombre for d in productos if d.id_producto is not None]
-            if len(nombres) == 1:
-                nombre_producto = nombres[0]
-            else:
-                nombre_producto = f"{nombres[0]} (+{len(nombres)-1} más)"
-        else:
-            nombre_producto = 'Sin detalle'
+        # ✅ Usar filter directo en lugar de detalleventa_set
+        detalles = DetalleVenta.objects.filter(
+            id_venta=venta
+        ).select_related('id_producto')
 
-        # Calcular tiempo transcurrido
+        nombres = [
+            d.id_producto.nombre
+            for d in detalles
+            if d.id_producto is not None
+        ]
+
+        if len(nombres) == 0:
+            nombre_producto = 'Sin detalle'
+        elif len(nombres) == 1:
+            nombre_producto = nombres[0]
+        else:
+            nombre_producto = f"{nombres[0]} (+{len(nombres)-1} más)"
+
         fecha = venta.fecha_venta.date() if hasattr(venta.fecha_venta, 'date') else venta.fecha_venta
         if fecha == hoy:
             tiempo = 'Hoy'
@@ -765,25 +790,6 @@ class CategoriaViewSet(viewsets.ModelViewSet):
             'mensaje': f"Categoría '{ categoria.nombre }' {'activada' if categoria.activo else 'desactivada'}."
         })
  
- 
-class ConfiguracionTiendaView(APIView):
-    """
-    GET  /api/configuracion/tienda/  → obtener configuración actual
-    PUT  /api/configuracion/tienda/  → actualizar configuración
-    """
- 
-    def get(self, request):
-        config = ConfiguracionTienda.get_config()
-        serializer = ConfiguracionTiendaSerializer(config)
-        return Response(serializer.data)
- 
-    def put(self, request):
-        config = ConfiguracionTienda.get_config()
-        serializer = ConfiguracionTiendaSerializer(config, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny

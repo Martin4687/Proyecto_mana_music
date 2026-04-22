@@ -6,7 +6,7 @@ from api.views import (
     InventarioViewSet, VentaViewSet, DetalleVentaViewSet,
     CompraViewSet, DetalleCompraViewSet, OrdenReabastecimientoViewSet,
     HistorialInventarioViewSet, SegmentoKmeansViewSet, ClasificacionAbcViewSet,
-    CategoriaViewSet, ConfiguracionTiendaView,
+    CategoriaViewSet,
     dashboard_stats,
     login,           
     logout,          
@@ -45,7 +45,6 @@ urlpatterns = [
     path('auth/refresh/', refresh_token, name='refresh-token'),
     path('auth/verify/', verify_token, name='verify-token'),
     path('dashboard/compras/', dashboard_compras, name='dashboard-compras'),
-    path('configuracion/tienda/', ConfiguracionTiendaView.as_view(), name='config-tienda'),
 ]
 
 """

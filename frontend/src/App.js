@@ -12,7 +12,6 @@ import Ventas from './Ventas';
 import Compras from './Compras';
 import OrdenesReabastecimiento from './OrdenesReabastecimiento';
 import Proveedores from './Proveedores';
-import Configuracion from './Configuracion';
 import Usuarios from './Usuarios';
 const API_URL = 'http://localhost:8000/api';
 
@@ -204,12 +203,7 @@ function App() {
               </RutaProtegida>
             } />
  
-            {/* Configuración — solo ADMIN */}
-            <Route path="/configuracion" element={
-              <RutaProtegida path="/configuracion" rol={rol}>
-                <Configuracion />
-              </RutaProtegida>
-            } />
+            
  
             {/* 404 */}
             <Route path="*" element={<Navigate to={rutaInicio} replace />} />

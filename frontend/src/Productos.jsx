@@ -11,15 +11,10 @@ const UNIDADES_MEDIDA = [
   { value: 'PIEZA', label: 'Pieza' }
 ];
 
-const CATEGORIAS = [
-  { value: 'INSTRUMENTO', label: 'Instrumento' },
-  { value: 'ACCESORIO', label: 'Accesorio' },
-  { value: 'REPUESTO', label: 'Repuesto' }
-];
-
 function Productos() {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [categorias, setCategorias] = useState([]);
   const [error, setError] = useState('');
   
   // Filtros y búsqueda
@@ -54,6 +49,7 @@ function Productos() {
 
   useEffect(() => {
     cargarProductos();
+    cargarCategorias();
   }, []);
 
   const cargarProductos = async () => {
@@ -70,12 +66,21 @@ function Productos() {
     }
   };
 
+  const cargarCategorias = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/categorias/?activo=true`);
+    setCategorias(res.data);
+  } catch (e) {
+    console.error('Error cargando categorías:', e);
+  }
+};
+
   // ==================== FILTRADO Y BÚSQUEDA ====================
   
   const productosFiltrados = productos.filter(producto => {
     const matchSearch = producto.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                        producto.descripcion?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchCategoria = !filtroCategoria || producto.categoria === filtroCategoria;
+    const matchCategoria = !filtroCategoria || String(producto.categoria) === String(filtroCategoria);
     const matchEstado = filtroEstado === '' || 
                        (filtroEstado === 'true' ? producto.activo : !producto.activo);
     
@@ -102,7 +107,7 @@ function Productos() {
       descripcion: '',
       precio_unitario: '',
       unidad_medida: 'UND',
-      categoria: 'INSTRUMENTO',
+      categoria: categorias[0]?.id_categoria || '',
       activo: true
     });
     setFormErrors({});
@@ -117,7 +122,7 @@ function Productos() {
       descripcion: producto.descripcion || '',
       precio_unitario: producto.precio_unitario,
       unidad_medida: producto.unidad_medida,
-      categoria: producto.categoria,
+      categoria: producto.categoria || '',
       activo: producto.activo
     });
     setFormErrors({});
@@ -192,7 +197,9 @@ function Productos() {
       setProductoAEliminar(null);
     } catch (error) {
       console.error('Error al eliminar producto:', error);
-      alert('Error al eliminar el producto');
+      const msg = error.response?.data?.error || 'Error al eliminar el producto';
+        alert(msg);
+        setShowDeleteConfirm(false);
     }
   };
 
@@ -243,14 +250,12 @@ function Productos() {
         </div>
 
         <div className="filtros-grupo">
-          <select
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="filtro-select"
-          >
+          <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)}>
             <option value="">Todas las categorías</option>
-            {CATEGORIAS.map(cat => (
-              <option key={cat.value} value={cat.value}>{cat.label}</option>
+            {categorias.map(cat => (
+              <option key={cat.id_categoria} value={cat.id_categoria}>
+                {cat.nombre}
+              </option>
             ))}
           </select>
 
@@ -299,8 +304,8 @@ function Productos() {
                   <td className="nombre-cell">{producto.nombre}</td>
                   <td className="descripcion-cell">{producto.descripcion || '-'}</td>
                   <td>
-                    <span className={`badge badge-${(producto.categoria || '').toLowerCase()}`}>
-                      {CATEGORIAS.find(c => c.value === producto.categoria)?.label}
+                    <span className="badge badge-categoria">
+                      {producto.categoria_nombre || '—'}
                     </span>
                   </td>
                   <td className="precio-cell">Bs. {parseFloat(producto.precio_unitario).toFixed(2)}</td>
@@ -400,8 +405,10 @@ function Productos() {
                     value={formData.categoria}
                     onChange={handleChange}
                   >
-                    {CATEGORIAS.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    {categorias.map(cat => (
+                      <option key={cat.id_categoria} value={cat.id_categoria}>
+                        {cat.nombre}
+                      </option>
                     ))}
                   </select>
                 </div>

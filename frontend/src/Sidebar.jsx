@@ -81,13 +81,6 @@ function Sidebar({ user, onLogout }) {
       path: '/usuarios',
       priority: 8
     },
-    {
-      id: 10,
-      name: 'Configuración',
-      icon: '⚙️',
-      path: '/configuracion',
-      priority: 10
-    }
   ];
 
   const toggleSidebar = () => {
