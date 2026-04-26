@@ -166,7 +166,7 @@ class ProveedorViewSet(viewsets.ModelViewSet):
  
         if tipo:
             queryset = queryset.filter(tipo=tipo)
-        if activo is not None and activo != '':
+        if activo is not None:
             queryset = queryset.filter(activo=activo.lower() == 'true')
         if busqueda:
             queryset = queryset.filter(nombre__icontains=busqueda)

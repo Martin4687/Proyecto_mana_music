@@ -726,8 +726,8 @@ export default function OrdenesReabastecimiento() {
 
       const [ordenesRes, provsRes, prodsRes] = await Promise.all([
         axios.get(`${API_URL}/compras/?${params.toString()}`),
-        axios.get(`${API_URL}/proveedores/`),
-        axios.get(`${API_URL}/productos/`),
+        axios.get(`${API_URL}/proveedores/?activo=true`),
+        axios.get(`${API_URL}/productos/?activo=true`),
       ]);
       setOrdenes(ordenesRes.data);
       setProveedores(provsRes.data);
