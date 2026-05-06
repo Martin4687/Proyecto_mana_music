@@ -175,6 +175,14 @@ class Usuario(models.Model):
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
         ordering = ['email']
+
+    @property
+    def is_authenticated(self):
+        return self.activo
+
+    @property
+    def is_anonymous(self):
+        return False
     
     def __str__(self):
         return f"{self.email} - {self.id_persona}"

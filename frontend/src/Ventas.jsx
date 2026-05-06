@@ -59,28 +59,35 @@ function Ventas() {
   }, [ventas]);
 
   const cargarDatos = async () => {
-    try {
-      setLoading(true);
-      const [ventasRes, productosRes, usuariosRes] = await Promise.all([
-        axios.get(`${API_URL}/ventas/`),
-        axios.get(`${API_URL}/productos/`),
-        axios.get(`${API_URL}/usuarios/`)
-      ]);
-      
-      setVentas(ventasRes.data);
-      console.log('Primera venta:', JSON.stringify(ventasRes.data[0], null, 2));
-      console.log('Primer detalle:', JSON.stringify(ventasRes.data[0]?.detalles?.[0], null, 2));
-        
-      setProductos(productosRes.data.filter(p => p.activo));
-      setUsuarios(usuariosRes.data);
-      setError('');
-    } catch (error) {
-      console.error('Error al cargar datos:', error);
-      setError('Error al cargar los datos');
-    } finally {
-      setLoading(false);
+  try {
+    setLoading(true);
+    const usuario = JSON.parse(localStorage.getItem('user') || '{}');
+    const esAdmin = usuario.rol === 'ADMIN' || usuario.rol === 'Administrador';
+
+    const requests = [
+      axios.get(`${API_URL}/ventas/`),
+      axios.get(`${API_URL}/productos/`),
+    ];
+    // Solo admin necesita la lista de usuarios para el filtro
+    if (esAdmin) {
+      requests.push(axios.get(`${API_URL}/usuarios/`));
     }
-  };
+
+    const resultados = await Promise.all(requests);
+    
+    setVentas(resultados[0].data);
+    setProductos(resultados[1].data.filter(p => p.activo));
+    if (esAdmin && resultados[2]) {
+      setUsuarios(resultados[2].data);
+    }
+    setError('');
+  } catch (error) {
+    console.error('Error al cargar datos:', error);
+    setError('Error al cargar los datos');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const calcularResumen = () => {
     const hoy = new Date();
@@ -197,6 +204,14 @@ function Ventas() {
     if (nuevaCantidad < 1) return;
     const nuevoCarrito = [...carrito];
     nuevoCarrito[index].cantidad = parseInt(nuevaCantidad);
+    nuevoCarrito[index].subtotal = nuevoCarrito[index].cantidad * nuevoCarrito[index].precio_unitario;
+    setCarrito(nuevoCarrito);
+  };
+
+  const cambiarPrecio = (index, nuevoPrecio) => {
+    if (nuevoPrecio < 0) return;
+    const nuevoCarrito = [...carrito];
+    nuevoCarrito[index].precio_unitario = parseFloat(nuevoPrecio) || 0;
     nuevoCarrito[index].subtotal = nuevoCarrito[index].cantidad * nuevoCarrito[index].precio_unitario;
     setCarrito(nuevoCarrito);
   };
@@ -812,11 +827,38 @@ function Ventas() {
                 <div key={index} className="carrito-item">
                   <div className="item-info">
                     <strong>{item.producto.nombre}</strong>
-                    <span className="item-precio">
-                      Precio: Bs. {item.precio_unitario.toFixed(2)}
+                    <span className="item-precio-original">
+                      Precio lista: Bs. {parseFloat(item.producto.precio_unitario).toFixed(2)}
                     </span>
                   </div>
                   
+                  {/* ── NUEVO: precio editable ── */}
+                  <div className="item-precio-editable">
+                    <label>Precio venta:</label>
+                    <div className="precio-input-grupo">
+                      <span className="precio-prefix">Bs.</span>
+                      <input
+                        type="number"
+                        value={item.precio_unitario}
+                        onChange={(e) => cambiarPrecio(index, e.target.value)}
+                        min="0"
+                        step="0.50"
+                        className="input-precio"
+                      />
+                      {item.precio_unitario !== parseFloat(item.producto.precio_unitario) && (
+                        <button
+                          onClick={() => cambiarPrecio(index, item.producto.precio_unitario)}
+                          className="btn-reset-precio"
+                          title="Restaurar precio original"
+                        >
+                          ↺
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {/* ─────────────────────────── */}
+
+
                   <div className="item-cantidad">
                     <button
                       onClick={() => cambiarCantidad(index, item.cantidad - 1)}

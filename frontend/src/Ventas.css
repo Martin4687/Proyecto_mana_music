@@ -984,3 +984,67 @@
     font-size: 1.5rem;
   }
 }
+
+.item-precio-original {
+  font-size: 11px;
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.item-precio-editable {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.item-precio-editable label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.precio-input-grupo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #f8fafc;
+}
+
+.precio-input-grupo:focus-within {
+  border-color: #6366f1;
+  background: white;
+}
+
+.precio-prefix {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.input-precio {
+  border: none;
+  background: transparent;
+  width: 70px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  outline: none;
+}
+
+.btn-reset-precio {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.btn-reset-precio:hover {
+  color: #6366f1;
+}

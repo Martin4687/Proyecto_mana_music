@@ -13,10 +13,10 @@ import Compras from './Compras';
 import OrdenesReabastecimiento from './OrdenesReabastecimiento';
 import Proveedores from './Proveedores';
 import Usuarios from './Usuarios';
+import Reportes from './Reportes';
 const API_URL = 'http://localhost:8000/api';
 
 // Componentes placeholder para cada módulo
-const Reportes = () => <div className="page-content"><h1>📊 Reportes</h1><p>Módulo en construcción...</p></div>;
 const ClasificacionABC = () => <div className="page-content"><h1>📈 Clasificación ABC</h1><p>Próximamente...</p></div>;
 
 // ── Página de acceso denegado ─────────────────────────────────
@@ -57,27 +57,54 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Interceptor global: si cualquier request devuelve 401, cerrar sesión
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          const url = error.config?.url || '';
+          // Solo cerrar sesión si el error viene con mensaje de token inválido/expirado
+          // No cerrar sesión por errores de permisos en endpoints específicos
+          const data = error.response?.data || {};
+          const esTokenInvalido = 
+            data.code === 'token_not_valid' || 
+            data.detail?.toLowerCase?.().includes('token') ||
+            (!url.includes('/auth/login/') && !url.includes('/api/ventas/') && 
+            !url.includes('/api/productos/') && !url.includes('/api/usuarios/') &&
+            !url.includes('/api/inventarios/'));
+          
+          if (esTokenInvalido) {
+            clearSession();
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
     checkAuth();
+
+    return () => axios.interceptors.response.eject(interceptor);
   }, []);
 
-  const checkAuth = async () => {
+  const clearSession = () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    delete axios.defaults.headers.common['Authorization'];
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
+  const checkAuth = () => {
     const token = localStorage.getItem('accessToken');
     const savedUser = localStorage.getItem('user');
 
     if (token && savedUser) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       try {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        const response = await axios.get(`${API_URL}/auth/verify/`);
-
-        if (response.data.success) {
-          setUser(JSON.parse(savedUser));
-          setIsAuthenticated(true);
-        } else {
-          handleLogout();
-        }
-      } catch (error) {
-        console.error('Token inválido:', error);
-        handleLogout();
+        setUser(JSON.parse(savedUser));
+        setIsAuthenticated(true);
+      } catch (e) {
+        clearSession();
       }
     }
 
@@ -95,12 +122,7 @@ function App() {
     } catch (error) {
       console.error('Error en logout:', error);
     } finally {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      delete axios.defaults.headers.common['Authorization'];
-      setUser(null);
-      setIsAuthenticated(false);
+      clearSession();
     }
   };
 

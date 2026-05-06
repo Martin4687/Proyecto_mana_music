@@ -3,6 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db.models import Sum, Count, Avg, Q, F, ProtectedError
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -44,6 +45,16 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         if self.action in ['update', 'partial_update']:
             return UsuarioUpdateSerializer
         return UsuarioListSerializer
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        # Devolver la respuesta con UsuarioListSerializer para evitar el AttributeError
+        response_serializer = UsuarioListSerializer(instance)
+        return Response(response_serializer.data)
  
     def get_queryset(self):
         queryset = Usuario.objects.select_related('id_persona').all()
@@ -104,6 +115,7 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.all()
     serializer_class = ProductoSerializer
+    permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'descripcion', 'categoria']
     ordering_fields = ['nombre', 'precio_unitario', 'fecha_registro']
@@ -238,6 +250,7 @@ class ProductoProveedorViewSet(viewsets.ModelViewSet):
 class InventarioViewSet(viewsets.ModelViewSet):
     queryset = Inventario.objects.select_related('id_producto').all()
     serializer_class = InventarioSerializer
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get'])
     def resumen(self, request):
@@ -295,6 +308,7 @@ class VentaViewSet(viewsets.ModelViewSet):
     """ViewSet para gestión de ventas"""
     
     serializer_class = VentaSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """Obtener queryset optimizado"""
@@ -391,6 +405,7 @@ class DetalleVentaViewSet(viewsets.ModelViewSet):
     """
     
     serializer_class = DetalleVentaSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         """
@@ -999,44 +1014,22 @@ def verify_token(request):
     # significa que el token es válido
     
     try:
-        # El usuario está en request.user si usas autenticación de Django
-        # Pero como usamos nuestro modelo Usuario personalizado,
-        # extraemos los datos del token
-        
-        from rest_framework_simplejwt.authentication import JWTAuthentication
-        
-        jwt_auth = JWTAuthentication()
-        validated_token = jwt_auth.get_validated_token(
-            jwt_auth.get_raw_token(
-                jwt_auth.get_header(request)
-            )
-        )
-        
-        user_id = validated_token.get('user_id')
-        
-        usuario = Usuario.objects.select_related(
-            'id_persona',
-            'id_persona__id_rol'
-        ).get(id_usuario=user_id)
-        
+        usuario = request.user
+        if not usuario or not usuario.activo:
+            raise Exception('Usuario inválido')
+
         user_data = {
             'id': usuario.id_usuario,
             'email': usuario.email,
-            'nombre_completo': f"{usuario.id_persona.nombres} {usuario.id_persona.apellido_paterno} {usuario.id_persona.apellido_materno}",
+            'nombre_completo': f"{usuario.id_persona.nombres} {usuario.id_persona.apellido_paterno}",
             'rol': usuario.id_persona.id_rol.nombre_rol,
             'rol_id': usuario.id_persona.id_rol.id_rol,
         }
-        
-        return Response({
-            'success': True,
-            'user': user_data
-        }, status=status.HTTP_200_OK)
-        
+
+        return Response({'success': True, 'user': user_data}, status=status.HTTP_200_OK)
+
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': 'Token inválido'
-        }, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'success': False, 'message': 'Token inválido'}, status=status.HTTP_401_UNAUTHORIZED)
     
 
 class CompraViewSet(viewsets.ModelViewSet):
@@ -1223,3 +1216,341 @@ def dashboard_compras(request):
         'historial_reciente': historial,
     })
 
+
+
+# ═══════════════════════════════════════════════════════════════
+# MÓDULO DE REPORTES
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+def reporte_ventas_periodo(request):
+    fecha_desde = request.query_params.get('fecha_desde')
+    fecha_hasta = request.query_params.get('fecha_hasta')
+
+    qs = Venta.objects.all()
+    if fecha_desde:
+        qs = qs.filter(fecha_venta__date__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(fecha_venta__date__lte=fecha_hasta)
+
+    por_dia = list(qs.values('fecha_venta__date').annotate(
+        total=Sum('total'), cantidad=Count('id_venta'), promedio=Avg('total')
+    ).order_by('fecha_venta__date'))
+
+    por_forma_pago = list(qs.values('forma_pago').annotate(
+        total=Sum('total'), cantidad=Count('id_venta')
+    ))
+
+    totales = qs.aggregate(
+        total_general=Sum('total'),
+        cantidad_total=Count('id_venta'),
+        promedio_general=Avg('total')
+    )
+
+    for item in por_dia:
+        item['total'] = float(item['total'] or 0)
+        item['promedio'] = float(item['promedio'] or 0)
+        if item['fecha_venta__date']:
+            item['fecha_venta__date'] = item['fecha_venta__date'].isoformat()
+    for item in por_forma_pago:
+        item['total'] = float(item['total'] or 0)
+
+    return Response({
+        'por_dia': por_dia,
+        'por_forma_pago': por_forma_pago,
+        'totales': {
+            'total_general': float(totales['total_general'] or 0),
+            'cantidad_total': totales['cantidad_total'] or 0,
+            'promedio_general': float(totales['promedio_general'] or 0),
+        }
+    })
+
+
+@api_view(['GET'])
+def reporte_ventas_productos(request):
+    fecha_desde = request.query_params.get('fecha_desde')
+    fecha_hasta = request.query_params.get('fecha_hasta')
+
+    qs = DetalleVenta.objects.select_related('id_producto', 'id_venta')
+    if fecha_desde:
+        qs = qs.filter(id_venta__fecha_venta__date__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(id_venta__fecha_venta__date__lte=fecha_hasta)
+
+    resultado = list(qs.values(
+        'id_producto__id_producto',
+        'id_producto__nombre',
+        'id_producto__categoria__nombre'
+    ).annotate(
+        cantidad_vendida=Sum('cantidad'),
+        ingresos=Sum('subtotal'),
+        num_ventas=Count('id_detalleventa')
+    ).order_by('-ingresos'))
+
+    for item in resultado:
+        item['ingresos'] = float(item['ingresos'] or 0)
+
+    return Response(resultado)
+
+
+@api_view(['GET'])
+def reporte_ventas_vendedores(request):
+    fecha_desde = request.query_params.get('fecha_desde')
+    fecha_hasta = request.query_params.get('fecha_hasta')
+
+    qs = Venta.objects.select_related('id_usuario', 'id_usuario__id_persona')
+    if fecha_desde:
+        qs = qs.filter(fecha_venta__date__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(fecha_venta__date__lte=fecha_hasta)
+
+    resultado = list(qs.values(
+        'id_usuario__id_usuario',
+        'id_usuario__email',
+        'id_usuario__id_persona__nombres',
+        'id_usuario__id_persona__apellido_paterno'
+    ).annotate(
+        total_vendido=Sum('total'),
+        num_ventas=Count('id_venta'),
+        ticket_promedio=Avg('total')
+    ).order_by('-total_vendido'))
+
+    for item in resultado:
+        item['total_vendido'] = float(item['total_vendido'] or 0)
+        item['ticket_promedio'] = float(item['ticket_promedio'] or 0)
+
+    return Response(resultado)
+
+
+@api_view(['GET'])
+def reporte_inventario_estado(request):
+    inventarios = Inventario.objects.select_related(
+        'id_producto', 'id_producto__categoria'
+    ).all()
+
+    data = []
+    valor_total = 0.0
+    resumen_estados = {}
+
+    for inv in inventarios:
+        valor = float(inv.stock_actual) * float(inv.id_producto.precio_unitario or 0)
+        valor_total += valor
+        estado = inv.estado_inventario
+        resumen_estados[estado] = resumen_estados.get(estado, 0) + 1
+
+        data.append({
+            'id_producto': inv.id_producto.id_producto,
+            'nombre': inv.id_producto.nombre,
+            'categoria': inv.id_producto.categoria.nombre if inv.id_producto.categoria else 'Sin categoría',
+            'stock_actual': inv.stock_actual,
+            'stock_minimo': inv.stock_minimo,
+            'stock_maximo': inv.stock_maximo,
+            'punto_reorden': inv.punto_reorden,
+            'estado': estado,
+            'valor': valor,
+            'ultima_venta': inv.ultima_venta.isoformat() if inv.ultima_venta else None,
+        })
+
+    return Response({
+        'productos': data,
+        'valor_total': valor_total,
+        'resumen_estados': resumen_estados,
+        'total_productos': len(data)
+    })
+
+
+@api_view(['GET'])
+def reporte_compras_resumen(request):
+    fecha_desde = request.query_params.get('fecha_desde')
+    fecha_hasta = request.query_params.get('fecha_hasta')
+
+    qs = Compra.objects.select_related('id_proveedor')
+    if fecha_desde:
+        qs = qs.filter(fecha_compra__date__gte=fecha_desde)
+    if fecha_hasta:
+        qs = qs.filter(fecha_compra__date__lte=fecha_hasta)
+
+    por_proveedor = list(qs.values(
+        'id_proveedor__nombre',
+        'id_proveedor__id_proveedor'
+    ).annotate(
+        total_comprado=Sum('total'),
+        num_compras=Count('id_compra')
+    ).order_by('-total_comprado'))
+
+    for item in por_proveedor:
+        item['total_comprado'] = float(item['total_comprado'] or 0)
+
+    totales = qs.aggregate(
+        total_general=Sum('total'),
+        num_total=Count('id_compra')
+    )
+
+    return Response({
+        'por_proveedor': por_proveedor,
+        'totales': {
+            'total_general': float(totales['total_general'] or 0),
+            'num_total': totales['num_total'] or 0,
+        }
+    })
+
+
+@api_view(['GET'])
+def reporte_rentabilidad(request):
+    fecha_desde = request.query_params.get('fecha_desde')
+    fecha_hasta = request.query_params.get('fecha_hasta')
+
+    ventas_qs = DetalleVenta.objects.select_related('id_producto')
+    if fecha_desde:
+        ventas_qs = ventas_qs.filter(id_venta__fecha_venta__date__gte=fecha_desde)
+    if fecha_hasta:
+        ventas_qs = ventas_qs.filter(id_venta__fecha_venta__date__lte=fecha_hasta)
+
+    ventas_por_producto = ventas_qs.values(
+        'id_producto__id_producto', 'id_producto__nombre'
+    ).annotate(
+        ingresos=Sum('subtotal'),
+        cantidad=Sum('cantidad'),
+        precio_venta_promedio=Avg('precio_unitario')
+    )
+
+    precios_compra = {
+        c['id_producto__id_producto']: float(c['precio_compra_promedio'] or 0)
+        for c in DetalleCompra.objects.values('id_producto__id_producto').annotate(
+            precio_compra_promedio=Avg('precio_unitario')
+        )
+    }
+
+    resultado = []
+    for venta in ventas_por_producto:
+        id_prod = venta['id_producto__id_producto']
+        precio_venta = float(venta['precio_venta_promedio'] or 0)
+        precio_compra = precios_compra.get(id_prod, 0)
+        cantidad = venta['cantidad'] or 0
+        margen = precio_venta - precio_compra
+        margen_pct = (margen / precio_compra * 100) if precio_compra > 0 else 0
+
+        resultado.append({
+            'id_producto': id_prod,
+            'nombre': venta['id_producto__nombre'],
+            'cantidad': cantidad,
+            'ingresos': float(venta['ingresos'] or 0),
+            'precio_venta_promedio': precio_venta,
+            'precio_compra_promedio': precio_compra,
+            'margen_unitario': margen,
+            'margen_porcentaje': margen_pct,
+            'ganancia_total': margen * cantidad
+        })
+
+    resultado.sort(key=lambda x: x['ganancia_total'], reverse=True)
+    return Response(resultado)
+
+
+@api_view(['GET'])
+def reporte_ejecutivo(request):
+    from datetime import date as date_type
+    hoy_date = timezone.now().date()
+    inicio_mes = date_type(hoy_date.year, hoy_date.month, 1)
+    inicio_anio = date_type(hoy_date.year, 1, 1)
+
+    # Ventas
+    ventas_mes_qs = Venta.objects.filter(fecha_venta__date__gte=inicio_mes)
+    total_ventas_mes = float(ventas_mes_qs.aggregate(t=Sum('total'))['t'] or 0)
+    num_ventas_mes = ventas_mes_qs.count()
+    total_ventas_anio = float(
+        Venta.objects.filter(fecha_venta__date__gte=inicio_anio).aggregate(t=Sum('total'))['t'] or 0
+    )
+
+    top_producto = DetalleVenta.objects.filter(
+        id_venta__fecha_venta__date__gte=inicio_mes
+    ).values('id_producto__nombre').annotate(
+        total=Sum('subtotal')
+    ).order_by('-total').first()
+
+    mejor_vendedor = Venta.objects.filter(
+        fecha_venta__date__gte=inicio_mes
+    ).values(
+        'id_usuario__id_persona__nombres',
+        'id_usuario__id_persona__apellido_paterno'
+    ).annotate(total=Sum('total')).order_by('-total').first()
+
+    # Inventario
+    total_productos = Inventario.objects.count()
+    criticos = Inventario.objects.filter(estado_inventario='CRITICO').count()
+    bajos = Inventario.objects.filter(estado_inventario='BAJO').count()
+    valor_inventario = float(
+        Inventario.objects.annotate(
+            valor=F('stock_actual') * F('id_producto__precio_unitario')
+        ).aggregate(total=Sum('valor'))['total'] or 0
+    )
+    ordenes_pendientes = OrdenReabastecimiento.objects.filter(estado='PENDIENTE').count()
+
+    # Compras
+    compras_mes_qs = Compra.objects.filter(fecha_compra__date__gte=inicio_mes)
+    total_compras_mes = float(compras_mes_qs.aggregate(t=Sum('total'))['t'] or 0)
+    num_compras_mes = compras_mes_qs.count()
+
+    # Financiero
+    ganancia_mes = total_ventas_mes - total_compras_mes
+    margen_mes = (ganancia_mes / total_ventas_mes * 100) if total_ventas_mes > 0 else 0
+
+    # Tendencia 6 meses
+    meses_nombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    meses_es = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+    tendencia = []
+    for i in range(5, -1, -1):
+        month = hoy_date.month - i
+        year = hoy_date.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        mes_inicio = date_type(year, month, 1)
+        if month == 12:
+            mes_fin = date_type(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            mes_fin = date_type(year, month + 1, 1) - timedelta(days=1)
+        total = float(
+            Venta.objects.filter(
+                fecha_venta__date__gte=mes_inicio,
+                fecha_venta__date__lte=mes_fin
+            ).aggregate(t=Sum('total'))['t'] or 0
+        )
+        tendencia.append({'mes': meses_nombres[month - 1], 'anio': year, 'total': total})
+
+    return Response({
+        'generado_en': hoy_date.isoformat(),
+        'periodo': {
+            'mes_actual': f"{meses_es[hoy_date.month - 1]} {hoy_date.year}",
+            'inicio_mes': inicio_mes.isoformat(),
+            'anio': hoy_date.year,
+        },
+        'ventas': {
+            'total_mes': total_ventas_mes,
+            'num_ventas_mes': num_ventas_mes,
+            'total_anio': total_ventas_anio,
+            'ticket_promedio': total_ventas_mes / num_ventas_mes if num_ventas_mes > 0 else 0,
+            'top_producto': top_producto['id_producto__nombre'] if top_producto else 'N/A',
+            'mejor_vendedor': (
+                f"{mejor_vendedor['id_usuario__id_persona__nombres']} "
+                f"{mejor_vendedor['id_usuario__id_persona__apellido_paterno']}"
+                if mejor_vendedor else 'N/A'
+            ),
+        },
+        'inventario': {
+            'total_productos': total_productos,
+            'criticos': criticos,
+            'bajos': bajos,
+            'valor_total': valor_inventario,
+            'ordenes_pendientes': ordenes_pendientes,
+        },
+        'compras': {
+            'total_mes': total_compras_mes,
+            'num_compras_mes': num_compras_mes,
+        },
+        'financiero': {
+            'ganancia_neta_mes': ganancia_mes,
+            'margen_porcentaje': margen_mes,
+        },
+        'tendencia_6_meses': tendencia,
+    })

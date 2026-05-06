@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from api import views
 from api.views import (
     RolViewSet, PersonaViewSet, UsuarioViewSet,
     ProductoViewSet, ProveedorViewSet, ProductoProveedorViewSet,
@@ -13,6 +14,14 @@ from api.views import (
     refresh_token,   
     verify_token,
     dashboard_compras,
+    # ── Reportes ──────────────────────────────
+    reporte_ventas_periodo,
+    reporte_ventas_productos,
+    reporte_ventas_vendedores,
+    reporte_inventario_estado,
+    reporte_compras_resumen,
+    reporte_rentabilidad,
+    reporte_ejecutivo,
 )
 
 # Crear el router
@@ -45,6 +54,14 @@ urlpatterns = [
     path('auth/refresh/', refresh_token, name='refresh-token'),
     path('auth/verify/', verify_token, name='verify-token'),
     path('dashboard/compras/', dashboard_compras, name='dashboard-compras'),
+    # Reportes
+    path('reportes/ventas-periodo/',    reporte_ventas_periodo,    name='reporte-ventas-periodo'),
+    path('reportes/ventas-productos/',  reporte_ventas_productos,  name='reporte-ventas-productos'),
+    path('reportes/ventas-vendedores/', reporte_ventas_vendedores, name='reporte-ventas-vendedores'),
+    path('reportes/inventario/',        reporte_inventario_estado, name='reporte-inventario'),
+    path('reportes/compras/',           reporte_compras_resumen,   name='reporte-compras'),
+    path('reportes/rentabilidad/',      reporte_rentabilidad,      name='reporte-rentabilidad'),
+    path('reportes/ejecutivo/',         reporte_ejecutivo,         name='reporte-ejecutivo'),
 ]
 
 """

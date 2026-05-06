@@ -97,10 +97,10 @@ CORS_ALLOWED_ORIGINS = config(
 # Configuración de REST Framework:
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'api.authentication.UsuarioJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'api.authentication.IsUsuarioAuthenticated',
     ]
 }
 
