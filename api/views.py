@@ -1233,35 +1233,44 @@ def reporte_ventas_periodo(request):
     if fecha_hasta:
         qs = qs.filter(fecha_venta__date__lte=fecha_hasta)
 
-    por_dia = list(qs.values('fecha_venta__date').annotate(
-        total=Sum('total'), cantidad=Count('id_venta'), promedio=Avg('total')
+    # ── Sin Avg en annotate: calculamos promedio manualmente ──
+    por_dia_raw = list(qs.values('fecha_venta__date').annotate(
+        total=Sum('total'),
+        cantidad=Count('id_venta'),
     ).order_by('fecha_venta__date'))
 
+    por_dia = []
+    for item in por_dia_raw:
+        total = float(item['total'] or 0)
+        cantidad = item['cantidad'] or 0
+        por_dia.append({
+            'fecha_venta__date': item['fecha_venta__date'].isoformat() if item['fecha_venta__date'] else None,
+            'total': total,
+            'cantidad': cantidad,
+            'promedio': total / cantidad if cantidad > 0 else 0,
+        })
+
     por_forma_pago = list(qs.values('forma_pago').annotate(
-        total=Sum('total'), cantidad=Count('id_venta')
+        total=Sum('total'),
+        cantidad=Count('id_venta')
     ))
+    for item in por_forma_pago:
+        item['total'] = float(item['total'] or 0)
 
     totales = qs.aggregate(
         total_general=Sum('total'),
         cantidad_total=Count('id_venta'),
-        promedio_general=Avg('total')
     )
-
-    for item in por_dia:
-        item['total'] = float(item['total'] or 0)
-        item['promedio'] = float(item['promedio'] or 0)
-        if item['fecha_venta__date']:
-            item['fecha_venta__date'] = item['fecha_venta__date'].isoformat()
-    for item in por_forma_pago:
-        item['total'] = float(item['total'] or 0)
+    total_g = float(totales['total_general'] or 0)
+    cant_g  = totales['cantidad_total'] or 0
 
     return Response({
         'por_dia': por_dia,
         'por_forma_pago': por_forma_pago,
         'totales': {
-            'total_general': float(totales['total_general'] or 0),
-            'cantidad_total': totales['cantidad_total'] or 0,
-            'promedio_general': float(totales['promedio_general'] or 0),
+            'total_general':   total_g,
+            'cantidad_total':  cant_g,
+            'promedio_general': total_g / cant_g if cant_g > 0 else 0,
         }
     })
 
