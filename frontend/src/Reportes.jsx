@@ -85,10 +85,140 @@ function TabEjecutivo({ datos }) {
   const { ventas, inventario, compras, financiero, tendencia_6_meses, periodo, generado_en } = datos;
   const gananciaNegativa = financiero?.ganancia_neta_mes < 0;
 
+  const imprimirEjecutivo = () => {
+    const contenido = document.getElementById('ejecutivo-print');
+    if (!contenido) return;
+
+    const ventana = window.open('', '_blank', 'width=900,height=700');
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Informe Ejecutivo — Mana Music</title>
+          <style>
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: 'Georgia', 'Times New Roman', serif;
+              color: #1e293b;
+              line-height: 1.7;
+              padding: 30px 40px;
+              background: white;
+            }
+            .doc-header {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 20px;
+              margin-bottom: 24px;
+            }
+            .doc-brand { display: flex; align-items: center; gap: 16px; }
+            .doc-logo { font-size: 40px; line-height: 1; }
+            .doc-empresa {
+              font-size: 22px; font-weight: 800; color: #0f172a;
+              margin: 0; letter-spacing: 1px;
+              font-family: 'Arial', sans-serif;
+            }
+            .doc-titulo-doc {
+              font-size: 13px; font-weight: 500; color: #64748b;
+              margin: 4px 0 0 0; letter-spacing: 0.5px;
+              font-family: 'Arial', sans-serif;
+            }
+            .doc-meta { text-align: right; font-family: 'Arial', sans-serif; }
+            .doc-meta-item {
+              font-size: 13px; color: #64748b;
+              display: flex; justify-content: flex-end; gap: 6px;
+            }
+            .doc-meta-label { color: #94a3b8; }
+            .doc-divider {
+              border: none; border-top: 2px solid #0f172a; margin: 0 0 28px 0;
+            }
+            .doc-seccion { margin-bottom: 28px; }
+            .doc-seccion-titulo {
+              font-size: 12px; font-weight: 700; color: #0f172a;
+              letter-spacing: 1px; margin: 0 0 14px 0;
+              padding-bottom: 6px; border-bottom: 1px solid #e2e8f0;
+              font-family: 'Arial', sans-serif;
+            }
+            .doc-texto p {
+              margin: 0 0 12px 0; font-size: 14px;
+              color: #334155; text-align: justify;
+            }
+            .doc-positivo { color: #16a34a; }
+            .doc-negativo { color: #dc2626; }
+            .doc-alerta   { color: #dc2626; }
+            .doc-advertencia { color: #d97706; }
+            .doc-kpis-grid {
+              display: grid; grid-template-columns: repeat(4, 1fr);
+              gap: 1px; background: #e2e8f0;
+              border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+            }
+            .doc-kpi { background: white; padding: 16px; text-align: center; }
+            .doc-kpi-valor {
+              font-size: 16px; font-weight: 700; color: #0f172a;
+              font-family: 'Arial', sans-serif; line-height: 1.2;
+            }
+            .doc-kpi-etiqueta {
+              font-size: 10px; color: #64748b; margin-top: 4px;
+              font-family: 'Arial', sans-serif; font-weight: 500;
+            }
+            .doc-tabla { width: 100%; border-collapse: collapse; font-size: 13px; }
+            .doc-tabla td {
+              padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #334155;
+            }
+            .doc-tabla td:first-child { color: #64748b; width: 60%; }
+            .doc-tabla td:last-child { text-align: right; font-weight: 500; }
+            .doc-tabla-destacada { background: #f8fafc; font-size: 14px; }
+            .doc-tabla-destacada td { border-top: 1px solid #e2e8f0; }
+            /* Bar chart */
+            .bar-chart { display: flex; flex-direction: column; gap: 8px; }
+            .bar-item { display: flex; align-items: center; gap: 10px; }
+            .bar-label {
+              min-width: 80px; max-width: 120px; font-size: 11px;
+              color: #64748b; text-align: right;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
+            .bar-track {
+              flex: 1; height: 24px; background: #f1f5f9;
+              border-radius: 4px; position: relative; overflow: hidden;
+            }
+            .bar-fill { height: 100%; border-radius: 4px; }
+            .bar-value {
+              position: absolute; right: 8px; top: 50%;
+              transform: translateY(-50%); font-size: 11px;
+              font-weight: 600; color: #334155; white-space: nowrap;
+            }
+            .doc-footer {
+              margin-top: 40px; padding-top: 16px;
+              border-top: 1px solid #e2e8f0; text-align: center;
+            }
+            .doc-footer p {
+              font-size: 10px; color: #94a3b8; margin: 4px 0;
+              font-family: 'Arial', sans-serif;
+            }
+            @page { margin: 15mm 20mm; size: A4 portrait; }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          ${contenido.innerHTML}
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+    ventana.focus();
+    setTimeout(() => {
+      ventana.print();
+      ventana.close();
+    }, 500);
+  };
+
   return (
     <div className="ejecutivo-container">
       <div className="ejecutivo-acciones no-print">
-        <button className="btn-imprimir-reporte" onClick={() => window.print()}>
+        <button className="btn-imprimir-reporte" onClick={imprimirEjecutivo}>
           🖨️ Imprimir / Exportar PDF
         </button>
       </div>

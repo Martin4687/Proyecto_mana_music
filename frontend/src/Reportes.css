@@ -685,3 +685,71 @@
     size: A4 portrait;
   }
 }
+
+@media print {
+  /* Ocultar TODO excepto el documento ejecutivo */
+  body > * { display: none !important; }
+  
+  /* Mostrar solo el árbol necesario para llegar al documento */
+  body,
+  #root,
+  #root > *,
+  .app-layout,
+  .main-content,
+  .reportes-container,
+  .reportes-contenido,
+  .ejecutivo-container,
+  .ejecutivo-documento {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Ocultar todo lo que no es el documento */
+  .no-print,
+  .reportes-header,
+  .reportes-tabs,
+  .reporte-acciones,
+  .ejecutivo-acciones {
+    display: none !important;
+  }
+
+  /* Sidebar y otros elementos del layout */
+  .sidebar,
+  nav,
+  header,
+  aside,
+  .app-sidebar,
+  [class*="sidebar"],
+  [class*="Sidebar"],
+  [class*="nav"],
+  [class*="Nav"] {
+    display: none !important;
+  }
+
+  /* El contenido principal ocupa todo */
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .reportes-contenido {
+    border: none !important;
+    padding: 0 !important;
+    min-height: unset !important;
+  }
+
+  .ejecutivo-documento {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  @page {
+    margin: 15mm 20mm;
+    size: A4 portrait;
+  }
+}
