@@ -22,6 +22,10 @@ from api.views import (
     reporte_compras_resumen,
     reporte_rentabilidad,
     reporte_ejecutivo,
+    abc_ejecutar_analisis,
+    abc_clasificaciones,
+    abc_resumen,
+    abc_historial_producto,
 )
 
 # Crear el router
@@ -62,6 +66,11 @@ urlpatterns = [
     path('reportes/compras/',           reporte_compras_resumen,   name='reporte-compras'),
     path('reportes/rentabilidad/',      reporte_rentabilidad,      name='reporte-rentabilidad'),
     path('reportes/ejecutivo/',         reporte_ejecutivo,         name='reporte-ejecutivo'),
+
+    path('abc/ejecutar/',              abc_ejecutar_analisis,    name='abc-ejecutar'),
+    path('abc/clasificaciones/',       abc_clasificaciones,      name='abc-clasificaciones'),
+    path('abc/resumen/',               abc_resumen,              name='abc-resumen'),
+    path('abc/historial/<int:producto_id>/', abc_historial_producto, name='abc-historial'),
 ]
 
 """

@@ -72,7 +72,7 @@ function Sidebar({ user, onLogout }) {
       icon: '📈',
       path: '/clasificacion-abc',
       priority: 9,
-      badge: 'Próximamente'
+      //badge: 'Próximamente'
     },
     {
       id: 9,

@@ -335,38 +335,6 @@ class SegmentoKmeans(models.Model):
         return f"Segmento {self.cluster_label} - {self.id_producto.nombre}"
 
 
-class ClasificacionAbc(models.Model):
-    """Tabla de clasificación ABC"""
-    CATEGORIAS_ABC = [
-        ('A', 'Categoría A'),
-        ('B', 'Categoría B'),
-        ('C', 'Categoría C'),
-    ]
-    
-    id_clasificacion = models.AutoField(primary_key=True)
-    id_producto = models.ForeignKey(
-        Producto,
-        on_delete=models.CASCADE,
-        db_column='id_producto',
-        related_name='clasificaciones_abc'
-    )
-    categoria_abc = models.CharField(max_length=1, choices=CATEGORIAS_ABC)
-    fecha_clasificacion = models.DateField(auto_now_add=True)
-    ventas_acumuladas = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.00'))]
-    )
-    
-    class Meta:
-        db_table = 'clasificacion_abc'
-        verbose_name = 'Clasificación ABC'
-        verbose_name_plural = 'Clasificaciones ABC'
-        ordering = ['categoria_abc', '-ventas_acumuladas']
-    
-    def __str__(self):
-        return f"{self.id_producto.nombre} - Categoría {self.categoria_abc}"
-
 
 # ==================== TABLAS DE SEGUNDO NIVEL ====================
 
@@ -625,3 +593,169 @@ class HistorialInventario(models.Model):
     
     def __str__(self):
         return f"Historial #{self.id_historial} - {self.id_producto.nombre} - {self.tipo_movimiento}"
+    
+
+# ═══════════════════════════════════════════════════════════════
+# MÓDULO CLASIFICACIÓN ABC — Fase 1
+# ═══════════════════════════════════════════════════════════════
+
+class MetricaProducto(models.Model):
+    """
+    Métricas calculadas por producto en cada período mensual.
+    Es la tabla de entrada para el algoritmo K-Means.
+    Estructura base: nombre, precio, fecha_registro, categoria,
+    clasificacion, stock + métricas de ventas del período.
+    """
+    TENDENCIAS = [
+        ('SUBIENDO', 'Subiendo'),
+        ('ESTABLE',  'Estable'),
+        ('BAJANDO',  'Bajando'),
+    ]
+
+    id_metrica     = models.AutoField(primary_key=True)
+    id_producto    = models.ForeignKey(
+        Producto, on_delete=models.CASCADE,
+        related_name='metricas_abc'
+    )
+
+    # Período analizado
+    anio = models.IntegerField()
+    mes  = models.IntegerField()   # 1-12
+    fecha_calculo = models.DateTimeField(auto_now_add=True)
+
+    # ── Datos del producto en ese momento (snapshot) ──────────
+    nombre_producto   = models.CharField(max_length=100)
+    precio_unitario   = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    categoria_nombre  = models.CharField(max_length=50, default='Sin categoría')
+    stock_al_calcular = models.IntegerField(default=0)
+
+    # ── Métricas de ventas del período ────────────────────────
+    unidades_vendidas  = models.IntegerField(default=0)
+    ingresos_totales   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    num_transacciones  = models.IntegerField(default=0)
+    dias_con_venta     = models.IntegerField(default=0)
+
+    # ── Métricas derivadas ────────────────────────────────────
+    frecuencia_venta      = models.DecimalField(max_digits=6, decimal_places=3, default=0)
+    rotacion_inventario   = models.DecimalField(max_digits=8, decimal_places=3, default=0)
+    ticket_promedio       = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # ── Tendencia vs período anterior ─────────────────────────
+    variacion_unidades_pct = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    variacion_ingresos_pct = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    tendencia = models.CharField(max_length=10, choices=TENDENCIAS, default='ESTABLE')
+
+    # ── Score compuesto 0-100 (entrada para K-Means) ──────────
+    score_abc = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+
+    # ── Campos de Isolation Forest (Fase 2) ──────────────────
+    es_anomalia         = models.BooleanField(default=False)
+    score_anomalia      = models.DecimalField(
+        max_digits=8, decimal_places=4,
+        null=True, blank=True,
+        help_text='Score de Isolation Forest. Más negativo = más anómalo.'
+    )
+    score_abc_ajustado  = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0,
+        help_text='Score ABC después de aplicar penalización por anomalía.'
+    )
+    factor_penalizacion = models.DecimalField(
+        max_digits=4, decimal_places=3, default=1.0,
+        help_text='Factor multiplicador aplicado al score (0.5-1.0).'
+    )
+    detalle_anomalia    = models.TextField(
+        null=True, blank=True,
+        help_text='Descripción de qué variable disparó la detección.'
+    )
+
+    class Meta:
+        db_table = 'metrica_producto'
+        unique_together = ['id_producto', 'anio', 'mes']
+        ordering = ['-anio', '-mes', '-score_abc']
+
+    def __str__(self):
+        return f"{self.nombre_producto} — {self.anio}/{self.mes:02d} — Score: {self.score_abc}"
+
+
+class EjecucionModelo(models.Model):
+    """Registro de cada vez que corre el pipeline de análisis."""
+    ESTADOS = [
+        ('EXITOSO', 'Exitoso'),
+        ('ERROR',   'Error'),
+        ('PARCIAL', 'Parcial'),
+    ]
+
+    id_ejecucion          = models.AutoField(primary_key=True)
+    fecha_inicio          = models.DateTimeField()
+    fecha_fin             = models.DateTimeField(null=True, blank=True)
+    estado                = models.CharField(max_length=10, choices=ESTADOS, default='EXITOSO')
+    anio_analizado        = models.IntegerField()
+    mes_analizado         = models.IntegerField()
+    productos_procesados  = models.IntegerField(default=0)
+    productos_reclasificados = models.IntegerField(default=0)
+    silhouette_score      = models.DecimalField(max_digits=6, decimal_places=4, null=True, blank=True)
+    anomalias_detectadas  = models.IntegerField(default=0)
+    error_log             = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'ejecucion_modelo'
+        ordering = ['-fecha_inicio']
+
+    def __str__(self):
+        return f"Ejecución {self.anio_analizado}/{self.mes_analizado:02d} — {self.estado}"
+    
+class ClasificacionAbc(models.Model):
+    CATEGORIAS_ABC = [
+        ('A', 'Categoría A — Alta prioridad'),
+        ('B', 'Categoría B — Prioridad media'),
+        ('C', 'Categoría C — Baja prioridad'),
+    ]
+    MOTIVOS = [
+        ('CALCULO_INICIAL',   'Cálculo inicial'),
+        ('AUMENTO_VENTAS',    'Aumento de ventas'),
+        ('DESCENSO_VENTAS',   'Descenso de ventas'),
+        ('SIN_MOVIMIENTO',    'Sin movimiento'),
+        ('REACTIVACION',      'Reactivación'),
+        ('ESTACIONAL',        'Cambio estacional'),
+    ]
+
+    id_clasificacion   = models.AutoField(primary_key=True)
+    id_producto        = models.ForeignKey(
+        Producto, on_delete=models.CASCADE,
+        related_name='clasificaciones_abc'
+    )
+    id_metrica         = models.ForeignKey(
+        MetricaProducto, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='clasificacion'
+    )
+
+    # Período
+    anio = models.IntegerField()
+    mes  = models.IntegerField()
+    fecha_clasificacion = models.DateTimeField(auto_now_add=True)
+
+    # Clasificación
+    categoria_abc      = models.CharField(max_length=1, choices=CATEGORIAS_ABC)
+    categoria_anterior = models.CharField(max_length=1, choices=CATEGORIAS_ABC, null=True, blank=True)
+    hubo_cambio        = models.BooleanField(default=False)
+    motivo_cambio      = models.CharField(max_length=20, choices=MOTIVOS, null=True, blank=True)
+
+    # Datos del K-Means
+    cluster_kmeans       = models.IntegerField(null=True, blank=True)
+    distancia_centroide  = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
+    confianza            = models.DecimalField(max_digits=4, decimal_places=3, default=1.0)
+
+    # Pareto
+    pct_ingresos_global     = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    pct_ingresos_acumulado  = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    ventas_acumuladas       = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+
+    es_anomalia = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'clasificacion_abc'
+        unique_together = ['id_producto', 'anio', 'mes']
+        ordering = ['-anio', '-mes', 'categoria_abc']
+
+    def __str__(self):
+        return f"{self.id_producto.nombre} — {self.categoria_abc} ({self.anio}/{self.mes:02d})"

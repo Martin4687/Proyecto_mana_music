@@ -14,10 +14,11 @@ import OrdenesReabastecimiento from './OrdenesReabastecimiento';
 import Proveedores from './Proveedores';
 import Usuarios from './Usuarios';
 import Reportes from './Reportes';
+import ClasificacionABC from './ClasificacionABC';
 const API_URL = 'http://localhost:8000/api';
 
 // Componentes placeholder para cada módulo
-const ClasificacionABC = () => <div className="page-content"><h1>📈 Clasificación ABC</h1><p>Próximamente...</p></div>;
+
 
 // ── Página de acceso denegado ─────────────────────────────────
 const Denegado = () => (

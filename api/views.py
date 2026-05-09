@@ -1563,3 +1563,185 @@ def reporte_ejecutivo(request):
         },
         'tendencia_6_meses': tendencia,
     })
+
+# ═══════════════════════════════════════════════════════════════
+# CLASIFICACIÓN ABC — Vistas
+# ═══════════════════════════════════════════════════════════════
+
+from .abc_service import ejecutar_analisis_abc
+from .models import ClasificacionAbc, MetricaProducto, EjecucionModelo
+
+
+@api_view(['POST'])
+def abc_ejecutar_analisis(request):
+    """
+    POST /api/abc/ejecutar/
+    Body opcional: { "anio": 2026, "mes": 5 }
+    Si no se envía período, usa el mes actual.
+    """
+    anio = request.data.get('anio')
+    mes  = request.data.get('mes')
+
+    try:
+        resultado = ejecutar_analisis_abc(
+            anio=int(anio) if anio else None,
+            mes=int(mes)  if mes  else None,
+        )
+        return Response(resultado, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'exito': False, 'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def abc_clasificaciones(request):
+    """
+    GET /api/abc/clasificaciones/?anio=2026&mes=5
+    Devuelve todas las clasificaciones del período con métricas.
+    """
+    anio = request.query_params.get('anio', date.today().year)
+    mes  = request.query_params.get('mes',  date.today().month)
+
+    clasificaciones = ClasificacionAbc.objects.filter(
+        anio=int(anio), mes=int(mes)
+    ).select_related('id_producto', 'id_metrica', 'id_producto__categoria')
+
+    resultado = []
+    for clf in clasificaciones:
+        m = clf.id_metrica
+        resultado.append({
+            'id_clasificacion':   clf.id_clasificacion,
+            'id_producto':        clf.id_producto.id_producto,
+
+            # Estructura del ejemplo: nombre, precio, fecha_registro, categoria, clasificacion, stock
+            'nombre':             clf.id_producto.nombre,
+            'precio':             float(clf.id_producto.precio_unitario),
+            'fecha_registro':     clf.id_producto.fecha_registro.isoformat() if clf.id_producto.fecha_registro else None,
+            'categoria':          clf.id_producto.categoria.nombre if clf.id_producto.categoria else 'Sin categoría',
+            'clasificacion':      clf.categoria_abc,
+            'stock':              m.stock_al_calcular if m else 0,
+
+            # Métricas del período
+            'unidades_vendidas':  m.unidades_vendidas if m else 0,
+            'ingresos_totales':   float(m.ingresos_totales) if m else 0,
+            'score_abc':          float(m.score_abc) if m else 0,
+            'tendencia':          m.tendencia if m else 'ESTABLE',
+            'frecuencia_venta':   float(m.frecuencia_venta) if m else 0,
+            'rotacion_inventario': float(m.rotacion_inventario) if m else 0,
+
+            # Variaciones
+            'variacion_ingresos_pct': float(m.variacion_ingresos_pct) if m and m.variacion_ingresos_pct is not None else None,
+
+            # Clasificación
+            'categoria_anterior': clf.categoria_anterior,
+            'hubo_cambio':        clf.hubo_cambio,
+            'motivo_cambio':      clf.motivo_cambio,
+            'confianza':          float(clf.confianza),
+            'pct_ingresos_global':    float(clf.pct_ingresos_global),
+            'pct_ingresos_acumulado': float(clf.pct_ingresos_acumulado),
+        })
+
+    # Ordenar: primero A, luego B, luego C, dentro de cada grupo por score desc
+    orden = {'A': 0, 'B': 1, 'C': 2}
+    resultado.sort(key=lambda x: (orden[x['clasificacion']], -x['score_abc']))
+
+    return Response(resultado)
+
+
+@api_view(['GET'])
+def abc_resumen(request):
+    """
+    GET /api/abc/resumen/?anio=2026&mes=5
+    Resumen estadístico del período + historial de ejecuciones.
+    """
+    anio = int(request.query_params.get('anio', date.today().year))
+    mes  = int(request.query_params.get('mes',  date.today().month))
+
+    clfs = ClasificacionAbc.objects.filter(anio=anio, mes=mes).select_related('id_metrica')
+
+    conteo = {'A': 0, 'B': 0, 'C': 0}
+    ingresos = {'A': 0.0, 'B': 0.0, 'C': 0.0}
+    cambios = 0
+
+    for clf in clfs:
+        cat = clf.categoria_abc
+        conteo[cat] += 1
+        if clf.id_metrica:
+            ingresos[cat] += float(clf.id_metrica.ingresos_totales)
+        if clf.hubo_cambio:
+            cambios += 1
+
+    total_ingresos = sum(ingresos.values())
+
+    # Última ejecución
+    ultima = EjecucionModelo.objects.filter(
+        anio_analizado=anio, mes_analizado=mes, estado='EXITOSO'
+    ).order_by('-fecha_inicio').first()
+
+    # Historial de ejecuciones recientes
+    historial = list(
+        EjecucionModelo.objects.order_by('-fecha_inicio')[:10].values(
+            'id_ejecucion', 'fecha_inicio', 'estado',
+            'anio_analizado', 'mes_analizado',
+            'productos_procesados', 'productos_reclasificados',
+            'silhouette_score'
+        )
+    )
+    for h in historial:
+        if h['fecha_inicio']:
+            h['fecha_inicio'] = h['fecha_inicio'].isoformat()
+        if h['silhouette_score']:
+            h['silhouette_score'] = float(h['silhouette_score'])
+
+    return Response({
+        'periodo': {'anio': anio, 'mes': mes},
+        'conteo': conteo,
+        'ingresos_por_categoria': {
+            k: round(v, 2) for k, v in ingresos.items()
+        },
+        'pct_ingresos': {
+            k: round(v / total_ingresos * 100, 1) if total_ingresos > 0 else 0
+            for k, v in ingresos.items()
+        },
+        'total_productos': sum(conteo.values()),
+        'total_ingresos': round(total_ingresos, 2),
+        'productos_reclasificados': cambios,
+        'ultima_ejecucion': {
+            'fecha': ultima.fecha_inicio.isoformat() if ultima else None,
+            'silhouette_score': float(ultima.silhouette_score) if ultima and ultima.silhouette_score else None,
+        },
+        'historial_ejecuciones': historial,
+    })
+
+
+@api_view(['GET'])
+def abc_historial_producto(request, producto_id):
+    """
+    GET /api/abc/historial/<producto_id>/
+    Historial de clasificaciones de un producto a lo largo del tiempo.
+    """
+    clfs = ClasificacionAbc.objects.filter(
+        id_producto_id=producto_id
+    ).select_related('id_metrica').order_by('anio', 'mes')
+
+    resultado = []
+    for clf in clfs:
+        m = clf.id_metrica
+        resultado.append({
+            'anio':               clf.anio,
+            'mes':                clf.mes,
+            'periodo_label':      f"{clf.anio}/{clf.mes:02d}",
+            'clasificacion':      clf.categoria_abc,
+            'categoria_anterior': clf.categoria_anterior,
+            'hubo_cambio':        clf.hubo_cambio,
+            'motivo_cambio':      clf.motivo_cambio,
+            'score_abc':          float(m.score_abc) if m else 0,
+            'ingresos_totales':   float(m.ingresos_totales) if m else 0,
+            'unidades_vendidas':  m.unidades_vendidas if m else 0,
+            'tendencia':          m.tendencia if m else 'ESTABLE',
+            'variacion_ingresos_pct': float(m.variacion_ingresos_pct) if m and m.variacion_ingresos_pct is not None else None,
+        })
+
+    return Response(resultado)
