@@ -26,6 +26,9 @@ from api.views import (
     abc_clasificaciones,
     abc_resumen,
     abc_historial_producto,
+
+    abc_anomalias,
+    abc_detalle_producto,
 )
 
 # Crear el router
@@ -71,6 +74,9 @@ urlpatterns = [
     path('abc/clasificaciones/',       abc_clasificaciones,      name='abc-clasificaciones'),
     path('abc/resumen/',               abc_resumen,              name='abc-resumen'),
     path('abc/historial/<int:producto_id>/', abc_historial_producto, name='abc-historial'),
+
+    path('abc/anomalias/',                      abc_anomalias,          name='abc-anomalias'),
+    path('abc/detalle/<int:producto_id>/',      abc_detalle_producto,   name='abc-detalle'),
 ]
 
 """

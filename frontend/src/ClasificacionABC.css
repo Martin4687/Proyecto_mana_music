@@ -686,3 +686,295 @@
   .panel-control { flex-direction: column; align-items: stretch; }
   .btn-ejecutar { justify-content: center; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   FASE 2 — Anomalías e Isolation Forest
+════════════════════════════════════════════════════════════ */
+
+/* ── Banner de aviso anomalías ──────────────────────────── */
+
+.anomalias-header {
+  margin-bottom: 20px;
+}
+
+.anomalia-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-left: 4px solid #ea580c;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: #9a3412;
+}
+
+.aviso-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+
+/* ── Filas de anomalías ─────────────────────────────────── */
+
+.fila-anomalia {
+  background: #fff7ed !important;
+}
+
+.fila-anomalia:hover { background: #ffedd5 !important; }
+
+.score-original {
+  color: #64748b;
+  font-size: 13px;
+  text-decoration: line-through;
+  text-decoration-color: #94a3b8;
+}
+
+.score-ajustado {
+  color: #ea580c;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.reduccion-score {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.badge-factor {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.factor-severo   { background: #fee2e2; color: #991b1b; }
+.factor-moderado { background: #fef3c7; color: #92400e; }
+.factor-leve     { background: #fef9c3; color: #a16207; }
+
+.detalle-anomalia-cell {
+  font-size: 11px;
+  color: #64748b;
+  max-width: 250px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.btn-detalle {
+  background: #eff6ff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.btn-detalle:hover { background: #dbeafe; }
+
+.empty-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  max-width: 400px;
+  text-align: center;
+}
+
+/* ── Modal detalle ──────────────────────────────────────── */
+
+.modal-detalle {
+  max-width: 680px;
+}
+
+.detalle-body {
+  padding: 0 20px 20px;
+}
+
+.detalle-seccion {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.detalle-seccion:first-child {
+  border-top: none;
+  padding-top: 16px;
+}
+
+.detalle-seccion-titulo {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detalle-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.detalle-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.detalle-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detalle-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.detalle-valor {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.detalle-metrica {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.detalle-metrica-label {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.detalle-metrica-valor {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.col-pos { color: #16a34a !important; }
+.col-neg { color: #dc2626 !important; }
+
+/* ── Comparativa de scores ──────────────────────────────── */
+
+.scores-comparativa {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: center;
+}
+
+.score-box {
+  text-align: center;
+  padding: 16px 24px;
+  border-radius: 12px;
+  min-width: 140px;
+}
+
+.score-original-box { background: #f1f5f9; border: 1px solid #e2e8f0; }
+.score-ajustado-box { background: #fff7ed; border: 1px solid #fed7aa; }
+.score-ok-box       { background: #f0fdf4; border: 1px solid #bbf7d0; }
+
+.score-box-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+
+.score-box-valor {
+  font-size: 28px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.score-ajustado-box .score-box-valor { color: #ea580c; }
+.score-ok-box .score-box-valor       { color: #16a34a; }
+
+.score-box-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.score-arrow {
+  font-size: 18px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+/* ── Detalle anomalía ───────────────────────────────────── */
+
+.anomalia-detalle-box {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.anomalia-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.score-if {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.if-anomalo { background: #fee2e2; color: #991b1b; }
+.if-normal  { background: #dcfce7; color: #166534; }
+
+.anomalia-descripcion {
+  font-size: 13px;
+  color: #9a3412;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ── Confianza ──────────────────────────────────────────── */
+
+.confianza-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.confianza-barra-wrap {
+  flex: 1;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.confianza-barra {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.confianza-valor {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  min-width: 36px;
+  text-align: right;
+}

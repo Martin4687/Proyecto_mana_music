@@ -208,16 +208,21 @@ function ClasificacionABC() {
   const [modalHist, setModalHist]   = useState(null);
   const [histDatos, setHistDatos]   = useState([]);
   const [resultado, setResultado]   = useState(null);
+  const [anomalias, setAnomalias] = useState(null);
+  const [modalDetalle, setModalDetalle] = useState(null);
+  const [detalleProducto, setDetalleProducto] = useState(null);
 
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const [resRes, claRes] = await Promise.all([
-        axios.get(`${API_URL}/abc/resumen/`, { params: { anio, mes } }),
+      const [resRes, claRes, anomRes] = await Promise.all([
+        axios.get(`${API_URL}/abc/resumen/`,         { params: { anio, mes } }),
         axios.get(`${API_URL}/abc/clasificaciones/`, { params: { anio, mes } }),
+        axios.get(`${API_URL}/abc/anomalias/`,       { params: { anio, mes } }),
       ]);
       setResumen(resRes.data);
       setDatos(claRes.data);
+      setAnomalias(anomRes.data);
     } catch (e) {
       console.error('Error cargando ABC:', e);
     } finally {
@@ -266,6 +271,19 @@ function ClasificacionABC() {
       </div>
     );
   }
+
+  const abrirDetalle = async (producto) => {
+    setModalDetalle(producto);
+    try {
+      const res = await axios.get(
+        `${API_URL}/abc/detalle/${producto.id_producto}/`,
+        { params: { anio, mes } }
+      );
+      setDetalleProducto(res.data);
+    } catch (e) {
+      setDetalleProducto(null);
+    }
+  };
 
   return (
     <div className="abc-container">
@@ -338,6 +356,7 @@ function ClasificacionABC() {
       <div className="abc-tabs">
         {[
           { id: 'clasificacion', label: '📋 Clasificación' },
+          { id: 'anomalias',     label: `⚠️ Anomalías${anomalias?.total_anomalos > 0 ? ` (${anomalias.total_anomalos})` : ''}` },
           { id: 'ejecuciones',   label: '⚙️ Historial de Ejecuciones' },
         ].map(tab => (
           <button
@@ -459,6 +478,13 @@ function ClasificacionABC() {
                         >
                           📈
                         </button>
+                        <button
+                          className="btn-detalle"
+                          onClick={() => abrirDetalle(d)}
+                          title="Ver detalle completo"
+                        >
+                          🔍
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -531,7 +557,227 @@ function ClasificacionABC() {
           onCerrar={() => { setModalHist(null); setHistDatos([]); }}
         />
       )}
+
+      {/* ── Tab: Anomalías ───────────────────────────────── */}
+      {tabActual === 'anomalias' && (
+        <div className="abc-contenido">
+          {!anomalias || anomalias.total_anomalos === 0 ? (
+            <div className="abc-empty">
+              <div className="empty-icon">✅</div>
+              <p>No se detectaron anomalías en este período.</p>
+              <p className="empty-sub">
+                Isolation Forest analizó todas las transacciones y no encontró
+                valores atípicos significativos.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="anomalias-header">
+                <div className="anomalia-aviso">
+                  <span className="aviso-icon">⚠️</span>
+                  <div>
+                    <strong>{anomalias.total_anomalos} productos</strong> presentaron
+                    transacciones atípicas. Sus scores ABC fueron ajustados
+                    automáticamente para evitar clasificaciones infladas.
+                  </div>
+                </div>
+              </div>
+
+              <div className="tabla-wrap">
+                <table className="abc-tabla">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th>Categoría</th>
+                      <th>Score Original</th>
+                      <th>Score Ajustado</th>
+                      <th>Reducción</th>
+                      <th>Factor</th>
+                      <th>Detalle</th>
+                      <th>Ver</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {anomalias.productos.map((p, i) => (
+                      <tr key={i} className="fila-anomalia">
+                        <td>
+                          <div className="prod-nombre">{p.nombre}</div>
+                          <div className="prod-cat">{p.categoria}</div>
+                        </td>
+                        <td><BadgeCategoria cat={p.clasificacion} /></td>
+                        <td>
+                          <span className="score-original">{p.score_abc_original?.toFixed(1)}</span>
+                        </td>
+                        <td>
+                          <span className="score-ajustado">{p.score_abc_ajustado?.toFixed(1)}</span>
+                        </td>
+                        <td>
+                          <span className="reduccion-score">
+                            -{p.reduccion_score?.toFixed(1)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge-factor ${
+                            p.factor_penalizacion < 0.60 ? 'factor-severo'
+                            : p.factor_penalizacion < 0.80 ? 'factor-moderado'
+                            : 'factor-leve'
+                          }`}>
+                            ×{p.factor_penalizacion?.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="detalle-anomalia-cell">
+                          {p.detalle_anomalia || '—'}
+                        </td>
+                        <td>
+                          <button
+                            className="btn-detalle"
+                            onClick={() => abrirDetalle(p)}
+                            title="Ver detalle"
+                          >
+                            🔍
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+    {/* ── Modal detalle producto ────────────────────────── */}
+    {modalDetalle && (
+      <div className="modal-overlay" onClick={() => { setModalDetalle(null); setDetalleProducto(null); }}>
+        <div className="modal-hist modal-detalle" onClick={e => e.stopPropagation()}>
+          <div className="modal-hist-header">
+            <h3>🔍 Detalle del Producto</h3>
+            <button className="btn-cerrar" onClick={() => { setModalDetalle(null); setDetalleProducto(null); }}>✕</button>
+          </div>
+
+          {!detalleProducto ? (
+            <div className="modal-empty"><div className="spinner" /></div>
+          ) : (
+            <div className="detalle-body">
+              {/* Identificación */}
+              <div className="detalle-seccion">
+                <div className="detalle-grid-2">
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Nombre</span>
+                    <span className="detalle-valor">{detalleProducto.nombre}</span>
+                  </div>
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Categoría</span>
+                    <span className="detalle-valor">{detalleProducto.categoria}</span>
+                  </div>
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Precio</span>
+                    <span className="detalle-valor">{fmt(detalleProducto.precio)}</span>
+                  </div>
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Stock actual</span>
+                    <span className="detalle-valor">{detalleProducto.stock}</span>
+                  </div>
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Clasificación</span>
+                    <BadgeCategoria cat={detalleProducto.clasificacion} />
+                  </div>
+                  <div className="detalle-campo">
+                    <span className="detalle-label">Tendencia</span>
+                    <BadgeTendencia tendencia={detalleProducto.tendencia} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Métricas de ventas */}
+              <div className="detalle-seccion">
+                <h4 className="detalle-seccion-titulo">📊 Métricas del Período</h4>
+                <div className="detalle-grid-3">
+                  {[
+                    { label: 'Ingresos',         valor: fmt(detalleProducto.ingresos_totales) },
+                    { label: 'Unidades',          valor: detalleProducto.unidades_vendidas },
+                    { label: 'Transacciones',     valor: detalleProducto.num_transacciones },
+                    { label: 'Días con venta',    valor: detalleProducto.dias_con_venta },
+                    { label: 'Frecuencia',        valor: `${(detalleProducto.frecuencia_venta * 100).toFixed(1)}%` },
+                    { label: 'Rotación',          valor: detalleProducto.rotacion_inventario?.toFixed(2) },
+                    { label: 'Ticket promedio',   valor: fmt(detalleProducto.ticket_promedio) },
+                    { label: 'Variación ingresos',
+                      valor: detalleProducto.variacion_ingresos_pct !== null
+                        ? `${detalleProducto.variacion_ingresos_pct >= 0 ? '+' : ''}${detalleProducto.variacion_ingresos_pct?.toFixed(1)}%`
+                        : 'N/A',
+                      clase: detalleProducto.variacion_ingresos_pct >= 0 ? 'col-pos' : 'col-neg'
+                    },
+                  ].map((item, i) => (
+                    <div key={i} className="detalle-metrica">
+                      <span className="detalle-metrica-label">{item.label}</span>
+                      <span className={`detalle-metrica-valor ${item.clase || ''}`}>{item.valor}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Scores */}
+              <div className="detalle-seccion">
+                <h4 className="detalle-seccion-titulo">🎯 Scores ABC</h4>
+                <div className="scores-comparativa">
+                  <div className="score-box score-original-box">
+                    <div className="score-box-label">Score Original</div>
+                    <div className="score-box-valor">{detalleProducto.score_abc?.toFixed(2)}</div>
+                    <div className="score-box-sub">Calculado por K-Means</div>
+                  </div>
+                  <div className="score-arrow">
+                    {detalleProducto.es_anomalia ? '→ ⚠️ →' : '→ ✅ →'}
+                  </div>
+                  <div className={`score-box ${detalleProducto.es_anomalia ? 'score-ajustado-box' : 'score-ok-box'}`}>
+                    <div className="score-box-label">Score Ajustado</div>
+                    <div className="score-box-valor">{detalleProducto.score_abc_ajustado?.toFixed(2)}</div>
+                    <div className="score-box-sub">
+                      Factor: ×{detalleProducto.factor_penalizacion?.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Anomalía */}
+              {detalleProducto.es_anomalia && (
+                <div className="detalle-seccion">
+                  <h4 className="detalle-seccion-titulo">⚠️ Detección de Anomalías</h4>
+                  <div className="anomalia-detalle-box">
+                    <div className="anomalia-score-row">
+                      <span className="detalle-label">Score Isolation Forest</span>
+                      <span className={`score-if ${detalleProducto.score_anomalia < -0.1 ? 'if-anomalo' : 'if-normal'}`}>
+                        {detalleProducto.score_anomalia?.toFixed(4)}
+                      </span>
+                    </div>
+                    <p className="anomalia-descripcion">{detalleProducto.detalle_anomalia}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Confianza */}
+              <div className="detalle-seccion">
+                <div className="confianza-wrap">
+                  <span className="detalle-label">Confianza de clasificación</span>
+                  <div className="confianza-barra-wrap">
+                    <div
+                      className="confianza-barra"
+                      style={{ width: `${(detalleProducto.confianza || 0) * 100}%` }}
+                    />
+                  </div>
+                  <span className="confianza-valor">
+                    {((detalleProducto.confianza || 0) * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     </div>
+
+    
   );
 }
 

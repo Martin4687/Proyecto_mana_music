@@ -20,6 +20,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import silhouette_score
 
+from .isolation_forest_service import ejecutar_deteccion_anomalias
 
 # ── Configuración del análisis ────────────────────────────────
 
@@ -214,10 +215,19 @@ def ejecutar_kmeans(metricas: list) -> tuple[list, float]:
         return metricas, 1.0
 
     # Features para K-Means: score + métricas individuales normalizadas
-    campos_kmeans = ['score_abc', 'ingresos_totales', 'unidades_vendidas',
+    campos_kmeans = ['score_abc_ajustado', 'ingresos_totales', 'unidades_vendidas',
                      'frecuencia_venta', 'rotacion_inventario']
 
-    X_raw = np.array([[m[c] for c in campos_kmeans] for m in metricas], dtype=float)
+    X_raw = np.array([
+        [
+            m.get('score_abc_ajustado', m['score_abc']),
+            m['ingresos_totales'],
+            m['unidades_vendidas'],
+            m['frecuencia_venta'],
+            m['rotacion_inventario'],
+        ]
+        for m in metricas
+    ], dtype=float)
     scaler = MinMaxScaler()
     X = scaler.fit_transform(X_raw)
 
@@ -295,39 +305,57 @@ def calcular_pareto(metricas: list) -> list:
 
 # ── Paso 5: Persistir resultados ──────────────────────────────
 
-def guardar_resultados(metricas: list, anio: int, mes: int) -> int:
+def guardar_metricas_base(metricas: list, anio: int, mes: int):
     """
-    Guarda o actualiza MetricaProducto y ClasificacionAbc.
-    Devuelve el número de productos reclasificados.
+    Paso intermedio (Fase 2): guarda solo MetricaProducto.
+    Se llama ANTES de Isolation Forest y K-Means.
+    No toca ClasificacionAbc porque aún no hay categoria_abc.
     """
-    reclasificados = 0
-
     for m in metricas:
-        # Guardar o actualizar MetricaProducto
-        metrica_obj, _ = MetricaProducto.objects.update_or_create(
+        MetricaProducto.objects.update_or_create(
             id_producto_id=m['id_producto'],
             anio=anio,
             mes=mes,
             defaults={
-                'nombre_producto':    m['nombre'],
-                'precio_unitario':    Decimal(str(m['precio'])),
-                'categoria_nombre':   m['categoria'],
-                'stock_al_calcular':  m['stock'],
-                'unidades_vendidas':  m['unidades_vendidas'],
-                'ingresos_totales':   Decimal(str(m['ingresos_totales'])),
-                'num_transacciones':  m['num_transacciones'],
-                'dias_con_venta':     m['dias_con_venta'],
-                'frecuencia_venta':   Decimal(str(round(m['frecuencia_venta'], 3))),
+                'nombre_producto':     m['nombre'],
+                'precio_unitario':     Decimal(str(m['precio'])),
+                'categoria_nombre':    m['categoria'],
+                'stock_al_calcular':   m['stock'],
+                'unidades_vendidas':   m['unidades_vendidas'],
+                'ingresos_totales':    Decimal(str(m['ingresos_totales'])),
+                'num_transacciones':   m['num_transacciones'],
+                'dias_con_venta':      m['dias_con_venta'],
+                'frecuencia_venta':    Decimal(str(round(m['frecuencia_venta'], 3))),
                 'rotacion_inventario': Decimal(str(round(m['rotacion_inventario'], 3))),
-                'ticket_promedio':    Decimal(str(round(m['ticket_promedio'], 2))),
+                'ticket_promedio':     Decimal(str(round(m['ticket_promedio'], 2))),
                 'variacion_unidades_pct': m.get('variacion_unidades_pct'),
                 'variacion_ingresos_pct': m.get('variacion_ingresos_pct'),
-                'tendencia':          m.get('tendencia', 'ESTABLE'),
-                'score_abc':          Decimal(str(m['score_abc'])),
+                'tendencia':           m.get('tendencia', 'ESTABLE'),
+                'score_abc':           Decimal(str(m['score_abc'])),
+                # score_abc_ajustado se actualizará después de Isolation Forest
+                'score_abc_ajustado':  Decimal(str(m['score_abc'])),
+                'factor_penalizacion': Decimal('1.000'),
             }
         )
 
-        # Buscar clasificación anterior
+
+def guardar_resultados(metricas: list, anio: int, mes: int) -> int:
+    """
+    Paso final: guarda ClasificacionAbc con cluster y categoria_abc.
+    Se llama DESPUÉS de K-Means, cuando ya existe categoria_abc en cada dict.
+    """
+    reclasificados = 0
+
+    for m in metricas:
+        # Recuperar la MetricaProducto ya guardada
+        try:
+            metrica_obj = MetricaProducto.objects.get(
+                id_producto_id=m['id_producto'], anio=anio, mes=mes
+            )
+        except MetricaProducto.DoesNotExist:
+            continue
+
+        # Buscar clasificación anterior (mes previo)
         try:
             clf_anterior = ClasificacionAbc.objects.filter(
                 id_producto_id=m['id_producto']
@@ -348,7 +376,6 @@ def guardar_resultados(metricas: list, anio: int, mes: int) -> int:
         else:
             motivo = 'CALCULO_INICIAL' if cat_anterior is None else None
 
-        # Guardar ClasificacionAbc
         ClasificacionAbc.objects.update_or_create(
             id_producto_id=m['id_producto'],
             anio=anio,
@@ -365,6 +392,7 @@ def guardar_resultados(metricas: list, anio: int, mes: int) -> int:
                 'pct_ingresos_global':    Decimal(str(m.get('pct_ingresos_global', 0))),
                 'pct_ingresos_acumulado': Decimal(str(m.get('pct_ingresos_acumulado', 0))),
                 'ventas_acumuladas':      Decimal(str(m['ingresos_totales'])),
+                'es_anomalia':            m.get('es_anomalia', False),
             }
         )
 
@@ -414,6 +442,32 @@ def ejecutar_analisis_abc(anio: int = None, mes: int = None) -> dict:
         # 3. Scores
         metricas = calcular_scores(metricas)
 
+        # ── FASE 2 ────────────────────────────────────────────────
+        # Guardar métricas BASE (sin cluster ni categoria_abc aún)
+        guardar_metricas_base(metricas, anio, mes)
+
+        # Isolation Forest — detecta anomalías y ajusta score_abc_ajustado en BD
+        resultado_if = ejecutar_deteccion_anomalias(anio, mes)
+        anomalias_detectadas = resultado_if.get('anomalias_detectadas', 0)
+
+        # Recargar scores ajustados desde BD al dict en memoria
+        from .models import MetricaProducto as MP
+        metricas_bd = {
+            m_bd.id_producto_id: m_bd
+            for m_bd in MP.objects.filter(anio=anio, mes=mes)
+        }
+        for m in metricas:
+            pid = m['id_producto']
+            if pid in metricas_bd:
+                obj = metricas_bd[pid]
+                m['score_abc_ajustado'] = float(obj.score_abc_ajustado)
+                m['es_anomalia']        = obj.es_anomalia
+                m['factor_penalizacion'] = float(obj.factor_penalizacion)
+            else:
+                m['score_abc_ajustado'] = m['score_abc']
+                m['es_anomalia']        = False
+                m['factor_penalizacion'] = 1.0
+        # ─────────────────────────────────────────────────────────
         # 4. K-Means
         metricas, sil_score = ejecutar_kmeans(metricas)
 
@@ -435,6 +489,8 @@ def ejecutar_analisis_abc(anio: int = None, mes: int = None) -> dict:
         ejecucion.silhouette_score       = Decimal(str(sil_score))
         ejecucion.estado                 = 'EXITOSO'
         ejecucion.save()
+
+        ejecucion.anomalias_detectadas = anomalias_detectadas
 
         return {
             'exito': True,

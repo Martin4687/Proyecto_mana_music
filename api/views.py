@@ -1745,3 +1745,116 @@ def abc_historial_producto(request, producto_id):
         })
 
     return Response(resultado)
+
+# ── ABC Fase 2: Anomalías ─────────────────────────────────────
+
+@api_view(['GET'])
+def abc_anomalias(request):
+    """
+    GET /api/abc/anomalias/?anio=2026&mes=5
+    Devuelve los productos marcados como anómalos en el período,
+    con detalle de qué transacciones lo causaron.
+    """
+    anio = int(request.query_params.get('anio', date.today().year))
+    mes  = int(request.query_params.get('mes',  date.today().month))
+
+    metricas = MetricaProducto.objects.filter(
+        anio=anio, mes=mes, es_anomalia=True
+    ).select_related('id_producto', 'id_producto__categoria')
+
+    resultado = []
+    for m in metricas:
+        clf = ClasificacionAbc.objects.filter(
+            id_producto=m.id_producto, anio=anio, mes=mes
+        ).first()
+
+        resultado.append({
+            'id_producto':        m.id_producto.id_producto,
+            'nombre':             m.nombre_producto,
+            'precio':             float(m.precio_unitario),
+            'categoria':          m.categoria_nombre,
+            'clasificacion':      clf.categoria_abc if clf else '—',
+            'stock':              m.stock_al_calcular,
+
+            # Anomalía
+            'score_anomalia':      float(m.score_anomalia) if m.score_anomalia is not None else None,
+            'factor_penalizacion': float(m.factor_penalizacion),
+            'score_abc_original':  float(m.score_abc),
+            'score_abc_ajustado':  float(m.score_abc_ajustado),
+            'reduccion_score':     round(float(m.score_abc) - float(m.score_abc_ajustado), 2),
+            'detalle_anomalia':    m.detalle_anomalia,
+
+            # Ventas del período
+            'ingresos_totales':   float(m.ingresos_totales),
+            'unidades_vendidas':  m.unidades_vendidas,
+            'tendencia':          m.tendencia,
+        })
+
+    # Ordenar por reducción de score (las más impactadas primero)
+    resultado.sort(key=lambda x: x['reduccion_score'], reverse=True)
+
+    return Response({
+        'total_anomalos': len(resultado),
+        'periodo': {'anio': anio, 'mes': mes},
+        'productos': resultado,
+    })
+
+
+@api_view(['GET'])
+def abc_detalle_producto(request, producto_id):
+    """
+    GET /api/abc/detalle/<producto_id>/?anio=2026&mes=5
+    Detalle completo de un producto: métricas + anomalía + score original vs ajustado.
+    """
+    anio = int(request.query_params.get('anio', date.today().year))
+    mes  = int(request.query_params.get('mes',  date.today().month))
+
+    try:
+        metrica = MetricaProducto.objects.select_related(
+            'id_producto', 'id_producto__categoria'
+        ).get(id_producto_id=producto_id, anio=anio, mes=mes)
+    except MetricaProducto.DoesNotExist:
+        return Response({'error': 'No hay datos para este producto y período.'}, status=404)
+
+    clf = ClasificacionAbc.objects.filter(
+        id_producto_id=producto_id, anio=anio, mes=mes
+    ).first()
+
+    return Response({
+        # Estructura del ejemplo: nombre, precio, fecha_registro, categoria, clasificacion, stock
+        'nombre':          metrica.nombre_producto,
+        'precio':          float(metrica.precio_unitario),
+        'fecha_registro':  metrica.id_producto.fecha_registro.isoformat() if metrica.id_producto.fecha_registro else None,
+        'categoria':       metrica.categoria_nombre,
+        'clasificacion':   clf.categoria_abc if clf else '—',
+        'stock':           metrica.stock_al_calcular,
+
+        # Métricas del período
+        'unidades_vendidas':   metrica.unidades_vendidas,
+        'ingresos_totales':    float(metrica.ingresos_totales),
+        'num_transacciones':   metrica.num_transacciones,
+        'dias_con_venta':      metrica.dias_con_venta,
+        'frecuencia_venta':    float(metrica.frecuencia_venta),
+        'rotacion_inventario': float(metrica.rotacion_inventario),
+        'ticket_promedio':     float(metrica.ticket_promedio),
+        'tendencia':           metrica.tendencia,
+        'variacion_ingresos_pct': float(metrica.variacion_ingresos_pct) if metrica.variacion_ingresos_pct is not None else None,
+
+        # Scores
+        'score_abc':           float(metrica.score_abc),
+        'score_abc_ajustado':  float(metrica.score_abc_ajustado),
+        'factor_penalizacion': float(metrica.factor_penalizacion),
+
+        # Anomalía
+        'es_anomalia':     metrica.es_anomalia,
+        'score_anomalia':  float(metrica.score_anomalia) if metrica.score_anomalia is not None else None,
+        'detalle_anomalia': metrica.detalle_anomalia,
+
+        # Clasificación
+        'confianza':              float(clf.confianza) if clf else None,
+        'cluster_kmeans':         clf.cluster_kmeans if clf else None,
+        'categoria_anterior':     clf.categoria_anterior if clf else None,
+        'hubo_cambio':            clf.hubo_cambio if clf else False,
+        'pct_ingresos_global':    float(clf.pct_ingresos_global) if clf else 0,
+        'pct_ingresos_acumulado': float(clf.pct_ingresos_acumulado) if clf else 0,
+    })
